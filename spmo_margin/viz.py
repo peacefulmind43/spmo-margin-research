@@ -104,6 +104,30 @@ def _titled(ax, title: str, subtitle: str, c: dict[str, str]) -> None:
         )
 
 
+def _label_series_ends(ax, x, entries, min_gap: float = 0.052) -> None:
+    """Right-hand direct labels, nudged apart so converging series stay readable.
+
+    Call only after the axis limits are final -- positions are computed against them.
+    """
+    lo, hi = ax.get_ylim()
+    span = hi - lo or 1.0
+    placed: list[float] = []
+    for y, text, color in sorted(entries, key=lambda e: e[0]):
+        frac = (y - lo) / span
+        if placed and frac - placed[-1] < min_gap:
+            frac = placed[-1] + min_gap
+        placed.append(frac)
+        ax.text(
+            x,
+            lo + frac * span,
+            f"  {text}",
+            color=color,
+            fontsize=9,
+            va="center",
+            fontweight="bold",
+        )
+
+
 def _finish(fig, out: Path, mode: str) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     path = out.with_name(f"{out.stem}_{mode}{out.suffix}")
@@ -298,6 +322,59 @@ def plot_equity_curves(
         )
         ax.set_axisbelow(True)
         ax.margins(x=0.06)
+        fig.tight_layout()
+        return fig
+
+    return _both_modes(build, out)
+
+
+def plot_leverage_vs_saving(
+    table: pd.DataFrame,
+    out: Path,
+) -> list[Path]:
+    """Median and 5th-percentile wealth vs leverage, one line per savings rate.
+
+    Each series is indexed to its own value at 1.0x, so the panels compare the
+    *shape* of the leverage response rather than the size of the account.
+    """
+    levels = sorted(table.columns)
+    rates = list(table.index.get_level_values("contribution_rate").unique())
+
+    def build(c):
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.4, 7.6), sharex=True)
+        ramp = c["ramp"]
+
+        for ax, stat, title, subtitle in [
+            (
+                ax1,
+                "median",
+                "In the middle of the distribution, leverage pays",
+                "terminal wealth relative to the same savings rate held unlevered",
+            ),
+            (
+                ax2,
+                "p05",
+                "In the bad 5% of decades, leverage only ever costs",
+                "saving harder softens the penalty but never turns it into a gain",
+            ),
+        ]:
+            entries = []
+            for i, rate in enumerate(rates):
+                row = table.loc[(stat, rate)]
+                y = row / row[1.0]
+                color = ramp[min(i, len(ramp) - 1)]
+                ax.plot(levels, [y[l] for l in levels], color=color, lw=2.0)
+                label = "no saving" if rate == 0 else f"+{rate:.0%}/yr"
+                entries.append((y[levels[-1]], label, color))
+            ax.axhline(1.0, color=c["axis"], lw=1)
+            ax.set_ylabel("Terminal wealth vs unlevered")
+            ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.1f}x"))
+            _titled(ax, title, subtitle, c)
+            ax.set_xlim(levels[0], levels[-1] + 0.46)
+            ax.set_axisbelow(True)
+            _label_series_ends(ax, levels[-1], entries)
+
+        ax2.set_xlabel("Target leverage (constant, monthly rebalance)")
         fig.tight_layout()
         return fig
 

@@ -74,19 +74,84 @@ def test_tier_crossing_lowers_the_effective_cost():
 
 @pytest.mark.parametrize("leverage", [1.0, 1.5, 2.0, 3.0])
 @pytest.mark.parametrize("rebalance", ["daily", "monthly", "never"])
-def test_vectorised_matches_scalar(leverage, rebalance):
+@pytest.mark.parametrize(
+    "contribution,mode",
+    [(0.0, "deleverage"), (1_000.0, "deleverage"), (1_000.0, "invest")],
+)
+def test_vectorised_matches_scalar(leverage, rebalance, contribution, mode):
     rng = np.random.default_rng(42)
     rets = rng.normal(0.0003, 0.013, 1200)
     bm = 0.0363
 
-    scalar = simulate(rets, np.full(len(rets), bm), Account(leverage=leverage, rebalance=rebalance))
-    vector = simulate_paths(rets[None, :], leverage, bm, rebalance=rebalance)
+    scalar = simulate(
+        rets,
+        np.full(len(rets), bm),
+        Account(
+            leverage=leverage,
+            rebalance=rebalance,
+            monthly_contribution=contribution,
+            contribution_mode=mode,
+        ),
+    )
+    vector = simulate_paths(
+        rets[None, :],
+        leverage,
+        bm,
+        rebalance=rebalance,
+        monthly_contribution=contribution,
+        contribution_mode=mode,
+    )
 
     assert vector["cagr"][0] == pytest.approx(scalar["stats"]["cagr"], rel=1e-9)
     assert vector["max_drawdown"][0] == pytest.approx(
         scalar["stats"]["max_drawdown"], rel=1e-9
     )
     assert int(vector["margin_calls"][0]) == scalar["stats"]["margin_calls"]
+    assert vector["terminal_equity"][0] == pytest.approx(
+        scalar["equity"][-1], rel=1e-9
+    )
+    if contribution:
+        assert vector["worst_vs_contributed"][0] == pytest.approx(
+            scalar["stats"]["worst_vs_contributed"], rel=1e-9
+        )
+
+
+def test_contributions_are_not_counted_as_return():
+    # a dead-flat market, no borrowing, and a zero benchmark so idle cash earns
+    # nothing: every dollar of growth is deposits, so the time-weighted return
+    # must be exactly zero even though equity triples
+    n = 252
+    account = Account(
+        leverage=1.0, rebalance="never", equity=12_000.0, monthly_contribution=2_000.0
+    )
+    out = simulate(np.zeros(n), np.zeros(n), account)
+    assert out["stats"]["cagr"] == pytest.approx(0.0, abs=1e-12)
+    assert out["stats"]["total_contributed"] == pytest.approx(36_000.0)
+    assert out["equity"][-1] == pytest.approx(36_000.0)
+    assert out["stats"]["money_weighted_return"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_tax_shield_reduces_financing_cost_proportionally():
+    n = DAY_COUNT
+    bm = 0.04
+    base = simulate(
+        np.zeros(n), np.full(n, bm), Account(leverage=2.0, rebalance="never", equity=10_000.0)
+    )
+    shielded = simulate(
+        np.zeros(n),
+        np.full(n, bm),
+        Account(
+            leverage=2.0, rebalance="never", equity=10_000.0, interest_tax_shield=0.37
+        ),
+    )
+    # the shield scales the rate, and the rate compounds, so the ratio of interest
+    # paid is the ratio of the compounded amounts rather than a flat 0.63
+    rate = bm + 0.0150
+    gross = (1 + rate / DAY_COUNT) ** DAY_COUNT - 1
+    net = (1 + rate * 0.63 / DAY_COUNT) ** DAY_COUNT - 1
+    ratio = shielded["stats"]["interest_paid"] / base["stats"]["interest_paid"]
+    assert ratio == pytest.approx(net / gross, rel=1e-6)
+    assert ratio < 0.63  # compounding makes the shield worth slightly more
 
 
 def test_crash_wipes_out_high_leverage_but_not_low():

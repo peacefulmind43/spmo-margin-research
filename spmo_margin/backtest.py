@@ -25,6 +25,9 @@ from .metrics import summarise
 REBALANCE_PERIODS = {"daily": 1, "weekly": 5, "monthly": 21, "quarterly": 63}
 
 
+CONTRIBUTION_PERIOD = 21  # trading days, i.e. roughly monthly
+
+
 @dataclass
 class Account:
     """Configuration of the margin account being simulated."""
@@ -38,13 +41,23 @@ class Account:
     spread_override: float | None = None
     liquidation_slippage: float = 0.001
     benchmark_override: float | None = None
+    monthly_contribution: float = 0.0
+    contribution_mode: str = "deleverage"
+    interest_tax_shield: float = 0.0
 
     def borrow_rate(self, loan: float, benchmark: float) -> float:
         if self.benchmark_override is not None:
             benchmark = self.benchmark_override
         if self.spread_override is not None:
-            return max(benchmark + self.spread_override, 0.0)
-        return blended_margin_rate(loan, benchmark, self.tiers)
+            rate = max(benchmark + self.spread_override, 0.0)
+        else:
+            rate = blended_margin_rate(loan, benchmark, self.tiers)
+        # Deducting margin interest against other taxable income lowers its true
+        # cost. Modelled as a reduced effective rate, which assumes the deduction is
+        # usable in the year it accrues -- optimistic if investment income is the
+        # only income it can offset, and wrong entirely if the income it finances is
+        # tax-exempt, in which case the shield should be left at zero.
+        return rate * (1.0 - self.interest_tax_shield)
 
 
 def _rebalance_due(t: int, actual_lev: float, account: Account) -> bool:
@@ -77,6 +90,7 @@ def simulate(returns: np.ndarray, benchmark: np.ndarray, account: Account) -> di
     liquidation_cost = 0.0
     margin_calls = 0
     ruin_day = -1
+    contributions = np.zeros(n)
 
     for t in range(n):
         # 1. financing accrues on yesterday's balance
@@ -116,19 +130,36 @@ def simulate(returns: np.ndarray, benchmark: np.ndarray, account: Account) -> di
 
         leverage_path[t] = position / eq
 
-        # 4. scheduled rebalance back to target leverage
+        # 4. new cash arrives
+        if account.monthly_contribution and t % CONTRIBUTION_PERIOD == 0:
+            if account.contribution_mode == "invest":
+                # buy more of the asset and leave the loan alone, so the debt stays
+                # a fixed number of dollars and leverage decays as the account grows
+                position += account.monthly_contribution
+            elif account.contribution_mode == "deleverage":
+                # cash pays down the loan first, the strictly safer default
+                debit -= account.monthly_contribution
+            else:
+                raise ValueError(
+                    f"unknown contribution_mode: {account.contribution_mode!r}"
+                )
+            eq += account.monthly_contribution
+            contributions[t] = account.monthly_contribution
+
+        # 5. scheduled rebalance puts the account back on target
         if _rebalance_due(t, position / eq, account):
             position = account.leverage * eq
             debit = position - eq
 
         equity_curve[t + 1] = eq
 
-    stats = summarise(equity_curve, n_days=n)
+    stats = summarise(equity_curve, n_days=n, contributions=contributions)
     stats.update(
         leverage=account.leverage,
         rebalance=account.rebalance,
         interest_paid=interest_paid,
         interest_pct_of_start=interest_paid / account.equity,
+        monthly_contribution=account.monthly_contribution,
         liquidation_cost=liquidation_cost,
         margin_calls=margin_calls,
         ruin_day=ruin_day,

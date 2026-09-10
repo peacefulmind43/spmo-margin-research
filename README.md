@@ -142,6 +142,76 @@ At a 6% benchmark the robust-optimal leverage is **1.0x** — the momentum edge 
 longer covers the borrowing cost on a bad path. Financing above roughly 7% removes
 the case for margin here entirely.
 
+**Deductibility cuts the other way, and by a similar amount.** Where margin interest
+is deductible against other taxable income, the real cost of a 5.13% loan at a 37%
+marginal rate is about 3.2%, which shifts the answer up as decisively as a rate rise
+shifts it down. `Account(interest_tax_shield=0.37)` models this as a reduced effective
+rate. Two warnings on using it: it assumes the deduction is usable in the year it
+accrues, and it must be left at **zero** wherever the income being financed is itself
+tax-exempt — you cannot deduct the cost of earning exempt income, so a regime that
+exempts the gains also removes the shield. Which of those applies is a question for
+an accountant in the relevant jurisdiction, not for a backtest; the parameter exists
+so both branches can be priced rather than assumed.
+
+## Does an account you keep funding want more leverage?
+
+The intuition says yes: new cash every month can meet a margin call, so you can
+afford to run hotter. **The intuition is wrong**, and it is wrong for a reason worth
+internalising — under constant-leverage rebalancing, *new cash does not buffer the
+position, it joins it.* Every dollar you deposit gets levered to the same target on
+the next rebalance, so funding the account buys exposure, not safety.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="results/figures/leverage_vs_saving_dark.png">
+  <img alt="Median terminal wealth rises with leverage at every savings rate, while 5th-percentile wealth declines at every savings rate" src="results/figures/leverage_vs_saving_light.png">
+</picture>
+
+Terminal wealth after 10 years, each row indexed to its own unlevered outcome, so
+the rows compare the *shape* of the leverage response rather than account size:
+
+| Savings rate | | 1.0x | 1.5x | 2.0x | 2.5x | 3.0x |
+|---|---|---|---|---|---|---|
+| none | median | 1.00 | 1.57 | 2.31 | 3.08 | 3.70 |
+| none | **5th pct** | 1.00 | 0.97 | 0.86 | 0.64 | **0.45** |
+| +50%/yr | median | 1.00 | 1.42 | 1.96 | 2.51 | 3.02 |
+| +50%/yr | **5th pct** | 1.00 | 0.98 | 0.93 | 0.81 | **0.68** |
+
+Read the 5th-percentile rows: **every entry is at or below 1.00, at every savings
+rate.** There is no contribution level at which leverage improves the bad outcome.
+Saving harder softens the penalty (0.45 → 0.68 at 3x) because deposits dilute the
+damage done to the early balance, but it never converts the penalty into a gain.
+
+Meanwhile the savings rate moves the same 5th percentile by multiples rather than
+fractions. On a $100k account, unlevered, the 5th-percentile outcome after ten years
+is **$174k with no contributions and $829k contributing 50% of the starting balance
+annually** — a 4.8x improvement, from the one lever that improves both tails at once.
+
+### The fixed-dollar-loan strategy is not the free lunch it looks like
+
+A tempting alternative: borrow a fixed number of dollars once and never top it up, so
+contributions and growth dilute the loan and leverage decays toward 1x. At first
+glance it dominates — 3.0x initial gives a 5.1% 5th-percentile CAGR against −2.2% for
+constant 3.0x, with a 34% chance of a −50% drawdown against 96%.
+
+It is an artefact of measuring the wrong thing. Tracking what leverage was actually
+*held*, "3.0x initial" under a fixed loan averages **1.47x** and ends at 1.13x. Once
+matched on average leverage the advantage evaporates:
+
+| Strategy | Initial | Mean held | 5th pct CAGR | P(drawdown < −50%) |
+|---|---|---|---|---|
+| constant leverage | 1.25x | 1.25x | 5.7% | 9% |
+| fixed dollar loan | 2.0x | 1.26x | 5.8% | 15% |
+| constant leverage | 1.5x | 1.50x | 5.5% | 24% |
+| fixed dollar loan | 3.0x | 1.47x | 5.1% | 34% |
+
+At matched average leverage the two are within noise on the 5th percentile, and the
+fixed loan is *worse* on drawdown probability — it concentrates its risk early, when
+the loan is large relative to the account. The funding strategy does not create
+anything; it only changes your effective average leverage. Choose the average you
+want and pick whichever mechanism gets you there.
+
+Reproduce with `python scripts/funding_strategies.py`.
+
 ## How the account is modelled
 
 Not as a leveraged ETF. The simulation holds a position `P`, a debit balance `D`
@@ -167,8 +237,9 @@ rebalancing is what makes high leverage both profitable and brutal.
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-python scripts/run_analysis.py          # ~35s, writes results/ and results/figures/
-pytest                                  # 22 tests
+python scripts/run_analysis.py          # ~35s, the main study
+python scripts/funding_strategies.py    # ~30s, contributions and funding strategy
+pytest                                  # 48 tests
 ```
 
 Data comes from Yahoo Finance (SPMO, SPY total return) and FRED (`DFF`, the Fed
@@ -178,15 +249,20 @@ deterministic. `--refresh` re-downloads.
 The test suite is worth a glance: it checks the tiered rate blending against
 hand-computed values, checks that an unlevered account reproduces the raw return
 exactly, checks that a flat market at 2x costs precisely one unit of compounded
-financing, and checks the fast vectorised bootstrap simulator against the readable
-day-by-day one across 12 leverage/schedule combinations.
+financing, checks that deposits are never counted as returns (a flat market with
+contributions must report exactly 0% time-weighted), and checks the fast vectorised
+bootstrap simulator against the readable day-by-day one across 36
+leverage/schedule/funding combinations. That last test is what caught a missing
+credit-interest branch in the vectorised twin, which only became reachable once
+contributions could push the balance from debit into cash.
 
 ### Layout
 
 | Path | What it holds |
 |---|---|
 | `spmo_margin/margin.py` | IBKR tiered rates, credit interest, 360-day accrual |
-| `spmo_margin/backtest.py` | day-by-day account with forced liquidation |
+| `spmo_margin/backtest.py` | day-by-day account with forced liquidation and funding |
+| `spmo_margin/metrics.py` | time- and money-weighted returns, drawdown, pain vs contributed |
 | `spmo_margin/bootstrap.py` | vectorised twin + moving-block resampling |
 | `spmo_margin/kelly.py` | Gaussian and empirical log-growth optimum |
 | `spmo_margin/optimal.py` | the several meanings of "optimal" |
