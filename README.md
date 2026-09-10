@@ -226,11 +226,42 @@ accruing tiered interest, and equity `E = P - D`, and steps day by day:
 Leverage therefore *drifts upward during a drawdown* between rebalances, exactly as
 it does in a real account, rather than being magically constant.
 
-Rebalancing frequency turns out to matter less than expected (`results/rebalance_schedules.csv`),
-with one exception: **never rebalancing is much safer than any schedule.** A buy-and-hold
-margin position at nominal 3x drifts down toward 1x as the position grows, ending at
-−59% max drawdown instead of −94%. It also earns far less. Constant-leverage
-rebalancing is what makes high leverage both profitable and brutal.
+### Rebalancing to target, or borrowing once and leaving it
+
+Frequency among the active schedules barely matters (`results/rebalance_schedules.csv`).
+Whether you rebalance *at all* matters enormously, and the two choices fail in
+different regimes — which makes this the one result here that a block bootstrap gets
+wrong.
+
+Resampled paths say a static loan wins outright. At matched average leverage
+(~1.5x held) it shows a 7.1% 5th-percentile CAGR against 5.4% for constant 1.5x,
+because constant-leverage rebalancing pays a volatility drag of roughly
+`L(L-1)σ²/2` — mechanically selling low and buying high — that a static position
+never pays.
+
+The real bear markets reverse it. Equity left at the bottom, 2.0x:
+
+| | dot-com 2000–02 | GFC 2007–09 |
+|---|---|---|
+| rebalanced to target | 0.41 | **0.30** |
+| borrowed once, left alone | 0.30 | **0.16** |
+
+A static loan lets leverage *ratchet up* through a decline: equity falls, the debt
+does not, so exposure grows exactly when it should shrink. Rebalancing to target
+sells into the fall and delevers you. Over 1993–2026 the static position still shows
+the shallower maximum drawdown (−57% against −80% at a 2.0x target), but only because
+the intervening bull markets decayed its average leverage to 1.18x — it was barely
+levered for most of the period.
+
+**Why the bootstrap misses this:** 21-day blocks preserve short-horizon volatility
+clustering but destroy multi-year persistence, so a resampled decade never contains a
+two-year grind down. The strategy whose weakness is precisely a long one-directional
+decline therefore looks better than it is. Where a conclusion depends on sustained
+trend rather than volatility, trust the historical episodes over the resampling.
+
+So: **rebalance to target.** The volatility drag is a real cost paid in normal
+markets, and it is the price of being deleveraged automatically in the one scenario
+that actually threatens the account.
 
 ## Reproducing
 
@@ -282,8 +313,11 @@ Honest limitations, roughly in order of how much they should worry you:
   by a whole turn of leverage.
 - **Daily closes hide intraday risk.** Margin calls are evaluated on closing prices.
   A real broker liquidates on intraday lows, so margin-call counts here are floors.
-- **Block bootstrap cannot invent a worse crash than the sample contains.** The worst
-  day it can draw is −15%. It reshuffles history, it does not extend it.
+- **Block bootstrap cannot invent a worse crash than the sample contains,** and it
+  cannot reproduce a slow one. The worst day it can draw is −15%, and 21-day blocks
+  destroy multi-year persistence, so no resampled decade contains a two-year grind
+  down. It reshuffles history, it does not extend it — which is why the rebalancing
+  comparison above is settled on the historical episodes instead.
 - **No taxes, no commissions, no dividend withholding.** Forced-liquidation slippage
   is the only transaction cost modelled.
 - **The 5th-percentile peak is not precisely located.** Across bootstrap seeds it

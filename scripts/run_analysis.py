@@ -80,17 +80,22 @@ def main() -> None:
     schedule_table = pd.concat(schedules, ignore_index=True)
     schedule_table.to_csv(RESULTS / "rebalance_schedules.csv", index=False)
 
+    # Both schedules in every crisis window. The two fail in different regimes and
+    # only the real episodes show it: rebalancing to target sells into a decline and
+    # so delevers, while a static loan lets leverage ratchet up as equity falls.
     crisis_rows = []
     for name, (start, end) in CRISES.items():
         window = extended.loc[start:end]
-        table, _ = backtest.sweep(window, LEVERAGES, rebalance="monthly")
-        crisis_rows.append(
-            table.assign(
-                episode=name,
-                start=str(window.index[0].date()),
-                end=str(window.index[-1].date()),
-            ).reset_index()
-        )
+        for schedule in ("monthly", "never"):
+            table, _ = backtest.sweep(window, LEVERAGES, rebalance=schedule)
+            crisis_rows.append(
+                table.assign(
+                    episode=name,
+                    schedule=schedule,
+                    start=str(window.index[0].date()),
+                    end=str(window.index[-1].date()),
+                ).reset_index()
+            )
     crisis_table = pd.concat(crisis_rows, ignore_index=True)
     crisis_table.to_csv(RESULTS / "crisis_episodes.csv", index=False)
 
