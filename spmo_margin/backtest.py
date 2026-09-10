@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from .margin import (
-    DAY_COUNT,
+    ACCRUAL_DIVISOR,
     IBKR_PRO_USD_TIERS,
     blended_margin_rate,
     credit_rate,
@@ -96,12 +96,12 @@ def simulate(returns: np.ndarray, benchmark: np.ndarray, account: Account) -> di
         # 1. financing accrues on yesterday's balance
         if debit > 0:
             rate = account.borrow_rate(debit, benchmark[t])
-            accrual = debit * rate / DAY_COUNT
+            accrual = debit * rate / ACCRUAL_DIVISOR
             debit += accrual
             interest_paid += accrual
         elif debit < 0:
             cash = -debit
-            debit -= cash * credit_rate(cash, benchmark[t]) / DAY_COUNT
+            debit -= cash * credit_rate(cash, benchmark[t]) / ACCRUAL_DIVISOR
 
         # 2. the market moves the position
         position *= 1.0 + returns[t]

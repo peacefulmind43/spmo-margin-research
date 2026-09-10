@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.optimize import minimize_scalar
 
-from .margin import DAY_COUNT
+from .margin import ACCRUAL_DIVISOR
 from .metrics import TRADING_DAYS
 
 
@@ -55,7 +55,7 @@ def empirical_kelly(
 ) -> dict[str, float]:
     """Leverage that maximises realised log growth on the observed return sample."""
     returns = np.asarray(returns, dtype=float)
-    daily_borrow = (np.asarray(benchmark, dtype=float) + borrow_spread) / DAY_COUNT
+    daily_borrow = (np.asarray(benchmark, dtype=float) + borrow_spread) / ACCRUAL_DIVISOR
 
     result = minimize_scalar(
         lambda f: -_log_growth(f, returns, daily_borrow),
@@ -81,7 +81,7 @@ def growth_curve(
     """Annualised log-growth rate across a grid of leverage levels."""
     if grid is None:
         grid = np.arange(0.0, 4.01, 0.05)
-    daily_borrow = (np.asarray(benchmark, dtype=float) + borrow_spread) / DAY_COUNT
+    daily_borrow = (np.asarray(benchmark, dtype=float) + borrow_spread) / ACCRUAL_DIVISOR
     growth = np.array(
         [np.expm1(_log_growth(float(f), returns, daily_borrow) * TRADING_DAYS) for f in grid]
     )

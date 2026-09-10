@@ -1,21 +1,29 @@
 {
   "benchmark_rate_now": 0.0363,
-  "proxy_fit": {
-    "alpha_daily": 0.00018454526686869624,
-    "beta": 0.9727105610417752,
-    "r2": 0.7117754756271724,
-    "resid_vol_daily": 0.0068987103536863,
-    "n_obs": 2742
+  "factor_fit": {
+    "alpha_daily": 0.00013220876469319693,
+    "alpha_annual": 0.03331660870268562,
+    "alpha_se_annual": 0.02861437007741894,
+    "alpha_t_stat": 1.1643313696071003,
+    "beta_market": 0.968894669415931,
+    "beta_momentum": 0.3149547472291983,
+    "r2": 0.7885457938336239,
+    "resid_vol_daily": 0.0059096831722396615,
+    "n_obs": 2715,
+    "window": [
+      "2015-10-13",
+      "2026-07-31"
+    ]
   },
   "live_window": [
     "2015-10-13",
     "2026-09-09"
   ],
   "extended_window": [
-    "1993-02-01",
-    "2026-09-09"
+    "1926-11-03",
+    "2026-07-31"
   ],
-  "synthetic_share": 0.675848209008157,
+  "synthetic_share": 0.8963542660813132,
   "worst_day": -0.15353688199036142,
   "rate_table": [
     {
@@ -43,20 +51,20 @@
       "blended_annual_rate": 0.0468
     }
   ],
-  "growth_optimal": 3.0,
-  "robust_optimal_p05": 1.207343566669318,
-  "robust_optimal_p25": 2.499938782142372,
+  "growth_optimal": 1.5728868827531317,
+  "robust_optimal_p05": 1.0,
+  "robust_optimal_p25": 1.0,
   "drawdown_budgets": {
     "-25%": NaN,
-    "-30%": 1.0441887081542132,
-    "-35%": 1.2245733587038552,
-    "-40%": 1.4132247012537005,
-    "-50%": 1.8064775235367656
+    "-30%": NaN,
+    "-35%": NaN,
+    "-40%": 1.0996448467774242,
+    "-50%": 1.395646296613092
   },
   "robust_optimal_high_rates": 1.0,
   "p05_optimal_range_across_seeds": [
     1.0,
-    1.3098174167972976
+    1.0
   ],
   "figures": [
     "results/figures/growth_vs_downside_light.png",

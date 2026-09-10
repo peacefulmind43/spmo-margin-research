@@ -45,7 +45,9 @@ def main() -> None:
     RESULTS.mkdir(exist_ok=True)
     FIGURES.mkdir(parents=True, exist_ok=True)
 
-    extended, _ = data.extend_with_proxy("SPMO", "SPY")
+    extended, _ = data.extend_with_factors(
+        "SPMO", include_alpha=False, include_residual=True
+    )
     horizon = HORIZON_YEARS * TRADING_DAYS
     paths = bootstrap.moving_block_paths(
         extended["ret"].to_numpy(), args.paths, horizon, seed=7

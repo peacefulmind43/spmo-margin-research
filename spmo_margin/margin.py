@@ -32,6 +32,15 @@ CREDIT_SPREAD = -0.0050     # idle cash earns roughly benchmark - 0.5%
 CREDIT_THRESHOLD = 10_000.0  # no interest paid on the first $10k of cash
 DAY_COUNT = 360             # IBKR accrues financing on a 360-day year
 
+# Financing accrues every *calendar* day, but the simulation steps once per *trading*
+# day (~252 a year). Dividing by DAY_COUNT at each step would therefore collect only
+# 252/360 -- about 70% -- of a year's interest, and understating the cost of borrowing
+# is exactly the error that makes leverage look better than it is. This divisor makes
+# one trading-day step carry the interest for the 365/252 calendar days it represents.
+TRADING_DAYS_PER_YEAR = 252
+CALENDAR_DAYS_PER_YEAR = 365
+ACCRUAL_DIVISOR = DAY_COUNT * TRADING_DAYS_PER_YEAR / CALENDAR_DAYS_PER_YEAR
+
 
 def blended_margin_rate(
     loan: float,

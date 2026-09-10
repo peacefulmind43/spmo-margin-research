@@ -20,7 +20,7 @@ from .backtest import CONTRIBUTION_PERIOD, REBALANCE_PERIODS
 from .margin import (
     CREDIT_SPREAD,
     CREDIT_THRESHOLD,
-    DAY_COUNT,
+    ACCRUAL_DIVISOR,
     IBKR_PRO_USD_TIERS,
     MARGIN_RATE_FLOOR,
 )
@@ -116,7 +116,7 @@ def simulate_paths(
         borrowing = alive & (debit > 0)
         if borrowing.any():
             rate = _blended_rate_vec(debit[borrowing], benchmark, tiers)
-            accrual = debit[borrowing] * rate * (1.0 - interest_tax_shield) / DAY_COUNT
+            accrual = debit[borrowing] * rate * (1.0 - interest_tax_shield) / ACCRUAL_DIVISOR
             debit[borrowing] += accrual
             interest_paid[borrowing] += accrual
 
@@ -124,7 +124,7 @@ def simulate_paths(
         lending = alive & (debit < 0)
         if lending.any():
             cash = -debit[lending]
-            debit[lending] -= cash * _credit_rate_vec(cash, benchmark) / DAY_COUNT
+            debit[lending] -= cash * _credit_rate_vec(cash, benchmark) / ACCRUAL_DIVISOR
 
         # 2. the market moves the position
         position[alive] *= 1.0 + paths[alive, t]

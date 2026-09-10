@@ -41,13 +41,21 @@ def main() -> None:
 
     # ------------------------------------------------------------------ data
     live = data.build_dataset("SPMO", refresh=args.refresh)
-    extended, fit = data.extend_with_proxy("SPMO", "SPY", refresh=args.refresh)
-    no_alpha = extended.copy()
-    no_alpha["ret"] = extended["ret"] - fit["alpha_daily"] * extended["is_synthetic"]
+
+    # Primary history: real market and momentum factor returns back to 1926, with the
+    # regression intercept set to zero and idiosyncratic risk resampled back in. The
+    # intercept is not projected because it is not significant (t = 1.2); see
+    # scripts/overfitting_audit.py for what believing it would be worth.
+    extended, fit = data.extend_with_factors(
+        "SPMO", include_alpha=False, include_residual=True, refresh=args.refresh
+    )
+    with_alpha, _ = data.extend_with_factors(
+        "SPMO", include_alpha=True, include_residual=True, refresh=args.refresh
+    )
 
     bm_now = float(live["bm"].iloc[-1])
     facts["benchmark_rate_now"] = bm_now
-    facts["proxy_fit"] = fit
+    facts["factor_fit"] = fit
     facts["live_window"] = [str(live.index[0].date()), str(live.index[-1].date())]
     facts["extended_window"] = [
         str(extended.index[0].date()),
@@ -69,8 +77,8 @@ def main() -> None:
     ext_sweep, ext_curves = backtest.sweep(extended, LEVERAGES, rebalance="monthly")
     ext_sweep.to_csv(RESULTS / "sweep_spmo_extended.csv")
 
-    noalpha_sweep, _ = backtest.sweep(no_alpha, LEVERAGES, rebalance="monthly")
-    noalpha_sweep.to_csv(RESULTS / "sweep_spmo_extended_no_alpha.csv")
+    alpha_sweep, _ = backtest.sweep(with_alpha, LEVERAGES, rebalance="monthly")
+    alpha_sweep.to_csv(RESULTS / "sweep_spmo_extended_with_alpha.csv")
 
     schedules = []
     for schedule in ("daily", "weekly", "monthly", "quarterly", "band", "never"):
@@ -102,9 +110,9 @@ def main() -> None:
     # --------------------------------------------------------------- Kelly
     kelly_rows, growth_grids = [], {}
     samples = {
-        "SPMO 2015-2026": live,
-        "extended 1993-2026": extended,
-        "extended, alpha stripped": no_alpha,
+        "SPMO 2015-2026 (live only)": live,
+        "1926-2026, alpha believed": with_alpha,
+        "1926-2026, alpha zeroed": extended,
     }
     for label, frame in samples.items():
         rets = frame["ret"].to_numpy()
@@ -211,7 +219,11 @@ def main() -> None:
     # --------------------------------------------------------------- console
     pd.set_option("display.width", 200, "display.max_columns", 40)
     print(f"\nIBKR USD benchmark (Fed Funds): {bm_now:.2%}")
-    print(f"SPMO~SPY beta {fit['beta']:.3f}, alpha {fit['alpha_daily'] * 252:.2%}/yr, R2 {fit['r2']:.3f}")
+    print(
+        f"SPMO on market+momentum: beta_mkt {fit['beta_market']:.3f}, "
+        f"beta_mom {fit['beta_momentum']:.3f}, alpha {fit['alpha_annual']:.2%}/yr "
+        f"(t = {fit['alpha_t_stat']:.2f}), R2 {fit['r2']:.3f}"
+    )
     print("\n--- bootstrap, extended history ---")
     print(
         boot_ext[

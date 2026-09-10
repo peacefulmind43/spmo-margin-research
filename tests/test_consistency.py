@@ -9,7 +9,8 @@ from spmo_margin.backtest import Account, simulate
 from spmo_margin.bootstrap import simulate_paths
 from spmo_margin.kelly import gaussian_kelly
 from spmo_margin.margin import (
-    DAY_COUNT,
+    ACCRUAL_DIVISOR,
+    TRADING_DAYS_PER_YEAR,
     IBKR_PRO_USD_TIERS,
     blended_margin_rate,
 )
@@ -46,15 +47,18 @@ def test_unlevered_account_compounds_the_raw_return():
 
 
 def test_leverage_costs_exactly_the_interest_on_a_flat_market():
-    # zero return, 2x leverage: equity falls by the compounded borrow cost alone
-    n = DAY_COUNT
+    # zero return, 2x leverage: equity falls by the compounded borrow cost alone.
+    # One year is TRADING_DAYS_PER_YEAR steps, and each step must carry the interest
+    # for the calendar days it stands for -- so a year costs rate * 365/360, not
+    # rate * 252/360.
+    n = TRADING_DAYS_PER_YEAR
     bm = 0.04
     equity0 = 10_000.0  # keeps the loan inside the first tier for the whole year
     account = Account(leverage=2.0, rebalance="never", equity=equity0)
     out = simulate(np.zeros(n), np.full(n, bm), account)
 
     rate = bm + 0.0150
-    expected = equity0 * ((1 + rate / DAY_COUNT) ** DAY_COUNT - 1)
+    expected = equity0 * ((1 + rate / ACCRUAL_DIVISOR) ** n - 1)
     assert out["stats"]["interest_paid"] == pytest.approx(expected, rel=1e-6)
     assert out["stats"]["terminal_multiple"] == pytest.approx(
         1 - expected / equity0, rel=1e-6
@@ -63,12 +67,12 @@ def test_leverage_costs_exactly_the_interest_on_a_flat_market():
 
 def test_tier_crossing_lowers_the_effective_cost():
     # a loan large enough to grow into tier II pays less than pure tier-I compounding
-    n = DAY_COUNT
+    n = TRADING_DAYS_PER_YEAR
     bm = 0.04
     account = Account(leverage=2.0, rebalance="never", equity=100_000.0)
     out = simulate(np.zeros(n), np.full(n, bm), account)
 
-    tier1_only = 100_000 * ((1 + (bm + 0.0150) / DAY_COUNT) ** DAY_COUNT - 1)
+    tier1_only = 100_000 * ((1 + (bm + 0.0150) / ACCRUAL_DIVISOR) ** n - 1)
     assert out["stats"]["interest_paid"] < tier1_only
 
 
@@ -132,7 +136,7 @@ def test_contributions_are_not_counted_as_return():
 
 
 def test_tax_shield_reduces_financing_cost_proportionally():
-    n = DAY_COUNT
+    n = TRADING_DAYS_PER_YEAR
     bm = 0.04
     base = simulate(
         np.zeros(n), np.full(n, bm), Account(leverage=2.0, rebalance="never", equity=10_000.0)
@@ -147,8 +151,8 @@ def test_tax_shield_reduces_financing_cost_proportionally():
     # the shield scales the rate, and the rate compounds, so the ratio of interest
     # paid is the ratio of the compounded amounts rather than a flat 0.63
     rate = bm + 0.0150
-    gross = (1 + rate / DAY_COUNT) ** DAY_COUNT - 1
-    net = (1 + rate * 0.63 / DAY_COUNT) ** DAY_COUNT - 1
+    gross = (1 + rate / ACCRUAL_DIVISOR) ** n - 1
+    net = (1 + rate * 0.63 / ACCRUAL_DIVISOR) ** n - 1
     ratio = shielded["stats"]["interest_paid"] / base["stats"]["interest_paid"]
     assert ratio == pytest.approx(net / gross, rel=1e-6)
     assert ratio < 0.63  # compounding makes the shield worth slightly more
@@ -176,3 +180,21 @@ def test_gaussian_kelly_matches_closed_form():
     assert out["f_star"] == pytest.approx(
         (out["mu_arith"] - 0.05) / out["sigma"] ** 2, rel=1e-12
     )
+
+
+def test_one_year_of_financing_covers_calendar_days_not_trading_days():
+    # The regression this guards: accruing rate/360 once per trading day collects
+    # only 252/360 of a year's interest, understating the cost of leverage by ~30%
+    # and biasing every conclusion toward more of it.
+    bm, spread = 0.04, 0.0150
+    equity0 = 10_000.0
+    out = simulate(
+        np.zeros(TRADING_DAYS_PER_YEAR),
+        np.full(TRADING_DAYS_PER_YEAR, bm),
+        Account(leverage=2.0, rebalance="never", equity=equity0),
+    )
+    simple_annual = equity0 * (bm + spread) * 365 / 360
+    assert out["stats"]["interest_paid"] == pytest.approx(simple_annual, rel=0.03)
+
+    naive = equity0 * ((1 + (bm + spread) / 360) ** TRADING_DAYS_PER_YEAR - 1)
+    assert out["stats"]["interest_paid"] / naive == pytest.approx(365 / 252, rel=0.02)

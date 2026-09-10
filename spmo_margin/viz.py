@@ -109,17 +109,25 @@ def _label_series_ends(ax, x, entries, min_gap: float = 0.052) -> None:
 
     Call only after the axis limits are final -- positions are computed against them.
     """
+    log = ax.get_yscale() == "log"
     lo, hi = ax.get_ylim()
-    span = hi - lo or 1.0
+    if log:
+        lo, hi = np.log10(lo), np.log10(hi)
+    span = (hi - lo) or 1.0
+
     placed: list[float] = []
     for y, text, color in sorted(entries, key=lambda e: e[0]):
-        frac = (y - lo) / span
+        if log and y <= 0:
+            continue
+        value = np.log10(y) if log else y
+        frac = (value - lo) / span
         if placed and frac - placed[-1] < min_gap:
             frac = placed[-1] + min_gap
         placed.append(frac)
+        position = lo + frac * span
         ax.text(
             x,
-            lo + frac * span,
+            10**position if log else position,
             f"  {text}",
             color=color,
             fontsize=9,
@@ -160,21 +168,29 @@ def plot_growth_and_downside(table: pd.DataFrame, out: Path) -> list[Path]:
         ax1.plot(lev, table.cagr_median, color=c["typical"], lw=2.0)
         ax1.plot(lev, table.cagr_p05, color=c["downside"], lw=2.0)
 
-        # The peak's exact location moves with the bootstrap seed (roughly 1.0x-1.3x),
-        # so the chart marks the flat region rather than claiming a precise argmax.
-        flat = (lev >= 1.0) & (lev <= 1.5)
+        # Where the 5th percentile peaks is a result, not a constant -- annotate what
+        # the data actually shows rather than hard-coding a shape from a past run.
+        p05 = table.cagr_p05.to_numpy()
+        peak_i = int(np.nanargmax(p05))
+        near_peak = p05 >= p05[peak_i] - 0.002
         ax1.plot(
-            lev[flat],
-            table.cagr_p05.to_numpy()[flat],
+            lev[near_peak],
+            p05[near_peak],
             color=c["downside"],
             lw=4.5,
             alpha=0.30,
             solid_capstyle="round",
         )
+        if peak_i == 0:
+            note = "best at 1.0x and falling\nfrom the first turn of leverage"
+        elif near_peak.sum() > 1:
+            note = f"flat to about {lev[near_peak].max():.2g}x,\nthen falls away"
+        else:
+            note = f"peaks near {lev[peak_i]:.2g}x,\nthen falls away"
         ax1.annotate(
-            "flat to about 1.5x,\nthen falls away",
-            xy=(1.25, float(table.cagr_p05.loc[1.25])),
-            xytext=(6, -52),
+            note,
+            xy=(lev[peak_i], p05[peak_i]),
+            xytext=(14, -50),
             textcoords="offset points",
             color=c["ink_secondary"],
             fontsize=9,
@@ -203,7 +219,7 @@ def plot_growth_and_downside(table: pd.DataFrame, out: Path) -> list[Path]:
         ax1.yaxis.set_major_formatter(PCT)
         _titled(
             ax1,
-            "More margin buys a better median and a worse floor",
+            "Margin barely moves the median and wrecks the floor",
             "shaded band = 5th to 95th percentile of bootstrapped 10-year outcomes",
             c,
         )
@@ -252,6 +268,8 @@ def plot_equity_curves(
     curves: dict[float, np.ndarray],
     out: Path,
     events: tuple[tuple[str, str, str], ...] = (
+        ("1929-09-01", "1932-07-01", "Depression"),
+        ("1973-01-01", "1974-10-01", "1973-74"),
         ("2000-03-24", "2002-10-09", "dot-com"),
         ("2007-10-09", "2009-03-09", "GFC"),
     ),
@@ -263,12 +281,12 @@ def plot_equity_curves(
         fig, ax = plt.subplots(figsize=(7.4, 4.9))
         ramp = c["ramp"]
 
-        for start, end, label in events:
+        for i, (start, end, label) in enumerate(events):
             x0, x1 = pd.Timestamp(start), pd.Timestamp(end)
             ax.axvspan(x0, x1, color=c["grid"], alpha=0.55, lw=0)
             ax.text(
                 x0 + (x1 - x0) / 2,
-                0.965,
+                0.985 if i % 2 == 0 else 0.925,  # stagger so close episodes fit
                 label,
                 transform=ax.get_xaxis_transform(),
                 ha="center",
@@ -278,21 +296,14 @@ def plot_equity_curves(
             )
 
         deepest = None
+        entries = []
         for i, lev in enumerate(levels):
             eq = np.asarray(curves[lev], dtype=float)
             y = np.where(eq > 0, eq / eq[0], np.nan)
             color = ramp[min(i, len(ramp) - 1)]
             ax.plot(dates, y, color=color, lw=2.0)
             last = int(np.nanmax(np.where(np.isfinite(y))[0]))
-            ax.text(
-                dates[last],
-                y[last],
-                f"  {lev:g}x",
-                color=color,
-                fontsize=9,
-                va="center",
-                fontweight="bold",
-            )
+            entries.append((y[last], f"{lev:g}x", color))
             trough = int(np.nanargmin(y / np.maximum.accumulate(y)))
             depth = float(y[trough] / np.maximum.accumulate(y)[trough] - 1.0)
             if lev == levels[-1]:
@@ -301,10 +312,10 @@ def plot_equity_curves(
         if deepest is not None:
             when, value, depth, color = deepest
             ax.annotate(
-                f"{levels[-1]:g}x drawdown {depth:.0%}\n({when:%b %Y})",
+                f"{levels[-1]:g}x drawdown {max(depth, -0.999):.1%} ({when:%b %Y})",
                 xy=(when, value),
-                xytext=(18, -34),
-                textcoords="offset points",
+                xytext=(0.34, 0.045),
+                textcoords="axes fraction",
                 color=color,
                 fontsize=9,
                 fontweight="bold",
@@ -313,15 +324,31 @@ def plot_equity_curves(
 
         ax.set_yscale("log")
         ax.set_ylabel("Growth of $1 (log scale)")
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:,.0f}x"))
+
+        def _growth(v, _):
+            if v >= 1:
+                return f"{v:,.0f}x"
+            if v >= 0.01:
+                return f"{v:.2f}x"
+            return f"{v:.3f}x"
+
+        ax.yaxis.set_major_formatter(FuncFormatter(_growth))
+        top = np.asarray(curves[levels[-1]], dtype=float)
+        base = np.asarray(curves[levels[0]], dtype=float)
+        beaten = top[-1] / top[0] < base[-1] / base[0]
         _titled(
             ax,
-            "Over 33 years leverage wins - if you never once sold",
-            "SPMO extended back to 1993 via its SPY beta; monthly rebalance, IBKR tiered financing",
+            (
+                f"Over the full sample {levels[-1]:g}x ends behind {levels[0]:g}x"
+                if beaten
+                else f"Leverage wins the full sample - if you never once sold"
+            ),
+            "market + momentum factor returns since 1926, alpha zeroed; monthly rebalance",
             c,
         )
         ax.set_axisbelow(True)
-        ax.margins(x=0.06)
+        ax.margins(x=0.09)
+        _label_series_ends(ax, dates[-1], entries, min_gap=0.045)
         fig.tight_layout()
         return fig
 
@@ -348,7 +375,7 @@ def plot_leverage_vs_saving(
             (
                 ax1,
                 "median",
-                "In the middle of the distribution, leverage pays",
+                "Even in the middle, leverage adds almost nothing",
                 "terminal wealth relative to the same savings rate held unlevered",
             ),
             (
@@ -429,10 +456,14 @@ def plot_kelly_curves(
         ax.set_xlabel("Leverage")
         ax.set_ylabel("Annualised log growth")
         ax.yaxis.set_major_formatter(PCT)
+        peaks = [float(grid[np.nanargmax(growth)]) for grid, growth in grids.values()]
         _titled(
             ax,
-            "The growth peak moves a whole turn of leverage on the drift assumption",
-            "same maths, three estimates of momentum's edge - and every peak is flat on top",
+            (
+                f"The growth peak spans {min(peaks):.2g}x to {max(peaks):.2g}x "
+                "on the drift assumption alone"
+            ),
+            "same maths, three estimates of the edge - and every peak is flat on top",
             c,
         )
         ax.set_axisbelow(True)
