@@ -1,0 +1,69 @@
+{
+  "benchmark_rate_now": 0.0363,
+  "proxy_fit": {
+    "alpha_daily": 0.00018454526686869624,
+    "beta": 0.9727105610417752,
+    "r2": 0.7117754756271724,
+    "resid_vol_daily": 0.0068987103536863,
+    "n_obs": 2742
+  },
+  "live_window": [
+    "2015-10-13",
+    "2026-09-09"
+  ],
+  "extended_window": [
+    "1993-02-01",
+    "2026-09-09"
+  ],
+  "synthetic_share": 0.675848209008157,
+  "worst_day": -0.15353688199036142,
+  "rate_table": [
+    {
+      "loan_usd": 25000,
+      "blended_annual_rate": 0.0513
+    },
+    {
+      "loan_usd": 50000,
+      "blended_annual_rate": 0.0513
+    },
+    {
+      "loan_usd": 100000,
+      "blended_annual_rate": 0.0513
+    },
+    {
+      "loan_usd": 250000,
+      "blended_annual_rate": 0.0483
+    },
+    {
+      "loan_usd": 500000,
+      "blended_annual_rate": 0.0473
+    },
+    {
+      "loan_usd": 1000000,
+      "blended_annual_rate": 0.0468
+    }
+  ],
+  "growth_optimal": 3.0,
+  "robust_optimal_p05": 1.2073435666693755,
+  "robust_optimal_p25": 2.4999387821423915,
+  "drawdown_budgets": {
+    "-25%": NaN,
+    "-30%": 1.0441887081542134,
+    "-35%": 1.224573358703856,
+    "-40%": 1.413224701253702,
+    "-50%": 1.806477523536765
+  },
+  "robust_optimal_high_rates": 1.0,
+  "p05_optimal_range_across_seeds": [
+    1.0,
+    1.30981741679728
+  ],
+  "figures": [
+    "results/figures/growth_vs_downside_light.png",
+    "results/figures/growth_vs_downside_dark.png",
+    "results/figures/equity_curves_light.png",
+    "results/figures/equity_curves_dark.png",
+    "results/figures/kelly_growth_light.png",
+    "results/figures/kelly_growth_dark.png"
+  ]
+}
