@@ -77,7 +77,7 @@ def test_tier_crossing_lowers_the_effective_cost():
 
 
 @pytest.mark.parametrize("leverage", [1.0, 1.5, 2.0, 3.0])
-@pytest.mark.parametrize("rebalance", ["daily", "monthly", "never"])
+@pytest.mark.parametrize("rebalance", ["daily", "monthly", "never", "band"])
 @pytest.mark.parametrize(
     "contribution,mode",
     [(0.0, "deleverage"), (1_000.0, "deleverage"), (1_000.0, "invest")],
@@ -114,6 +114,7 @@ def test_vectorised_matches_scalar(leverage, rebalance, contribution, mode, dip)
         scalar["stats"]["max_drawdown"], rel=1e-9
     )
     assert int(vector["margin_calls"][0]) == scalar["stats"]["margin_calls"]
+    assert int(vector["rebalances"][0]) == scalar["stats"]["rebalances"]
     assert vector["terminal_equity"][0] == pytest.approx(
         scalar["equity"][-1], rel=1e-9
     )
@@ -269,3 +270,55 @@ def test_momentum_haircut_removes_premium_but_keeps_the_risk():
     # volatility and the left tail must survive the haircut
     assert stripped["ret"].std() == pytest.approx(full["ret"].std(), rel=0.02)
     assert stripped["ret"].min() == pytest.approx(full["ret"].min(), abs=0.01)
+
+
+def test_rebalancing_is_not_free():
+    # Without a cost on the notional traded, the optimal no-trade band is trivially
+    # zero and any band comparison is meaningless.
+    rng = np.random.default_rng(3)
+    rets = rng.normal(0.0003, 0.015, 2520)
+    bm = np.full(len(rets), 0.0363)
+
+    free = simulate(
+        rets, bm, Account(leverage=1.5, rebalance="daily", rebalance_cost=0.0)
+    )
+    costed = simulate(
+        rets, bm, Account(leverage=1.5, rebalance="daily", rebalance_cost=0.0002)
+    )
+    assert free["stats"]["rebalance_cost_paid"] == 0.0
+    assert costed["stats"]["rebalance_cost_paid"] > 0.0
+    assert costed["stats"]["cagr"] < free["stats"]["cagr"]
+
+    # a wide band trades far less often than a daily schedule
+    banded = simulate(
+        rets, bm, Account(leverage=1.5, rebalance="band", band=0.15)
+    )
+    assert banded["stats"]["rebalances"] < costed["stats"]["rebalances"]
+
+
+def test_leverage_drift_formula_inverts_the_simulator():
+    # drift_to() is the closed-form inverse of how leverage moves with the market.
+    # Check it against the simulator rather than against itself.
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from position_calculator import drift_to
+
+    for target, bound in [(1.075, 1.129), (1.25, 1.4), (2.0, 3.0)]:
+        move = drift_to(target, bound)
+        # One day, that cumulative move, and financing switched off entirely --
+        # spread_override is needed because the tiered rate has a 0.75% floor that
+        # would otherwise accrue and shift the result in the sixth decimal.
+        out = simulate(
+            np.array([move]),
+            np.array([0.0]),
+            Account(
+                leverage=target,
+                rebalance="never",
+                maintenance_margin=0.0,
+                spread_override=0.0,
+            ),
+        )
+        reached = out["leverage_path"][0]
+        assert reached == pytest.approx(bound, rel=1e-9)

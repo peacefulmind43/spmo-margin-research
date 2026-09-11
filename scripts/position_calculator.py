@@ -71,6 +71,41 @@ def describe(
     }
 
 
+def drift_to(leverage: float, target_leverage: float) -> float:
+    """Cumulative market move that drifts ``leverage`` to ``target_leverage``.
+
+    Leverage follows ``L' = L(1 + x) / (1 + Lx)`` for a cumulative move ``x``, which
+    inverts in closed form. This is why a no-trade band is nearly moot at low
+    leverage and urgent at high leverage: at 1.075x a 20% fall moves leverage by
+    2%, while at 3x it doubles it.
+    """
+    numerator = target_leverage - leverage
+    denominator = leverage * (1.0 - target_leverage)
+    if denominator == 0:
+        return float("nan")
+    return numerator / denominator
+
+
+def print_band(target: float, band: float) -> None:
+    lower, upper = target * (1 - band), target * (1 + band)
+    print(
+        f"\nNo-trade band at {band:.0%} relative: rebalance only when leverage leaves"
+        f"\n  [{lower:.3f}x, {upper:.3f}x]"
+    )
+    up = drift_to(target, upper)
+    down = drift_to(target, lower)
+    print(
+        f"  upper bound {upper:.3f}x is reached after a cumulative move of {up:+.1%}"
+        f"\n  lower bound {lower:.3f}x is reached after a cumulative move of {down:+.0%}"
+    )
+    print(
+        "\nThe upper bound does all the work: it delevers you after a sustained"
+        "\ndecline. The lower bound needs a move so large it never binds in practice,"
+        "\nwhich means leverage is allowed to decay after gains and the loan is never"
+        "\ntopped up. That asymmetry is deliberate."
+    )
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--equity", type=float, required=True, help="account equity in USD")
@@ -93,6 +128,12 @@ def main() -> None:
         help="maintenance margin fraction; Reg-T is 0.25, portfolio margin nearer 0.15",
     )
     ap.add_argument(
+        "--band",
+        type=float,
+        default=0.05,
+        help="no-trade band as a relative fraction of the target (default 5%%)",
+    )
+    ap.add_argument(
         "--tax-shield",
         type=float,
         default=0.0,
@@ -112,7 +153,7 @@ def main() -> None:
         + (f"   interest deductible at {args.tax_shield:.0%}" if args.tax_shield else "")
     )
     print(
-        "\n  lev    position        loan     rate    interest/yr   as % equity"
+        "\n   lev     position        loan     rate    interest/yr   as % equity"
         "   margin call at   wiped out at"
     )
     print("  " + "-" * 96)
@@ -120,7 +161,7 @@ def main() -> None:
         call = "never" if r["call_at"] == float("-inf") else f"{r['call_at']:>7.1%}"
         gone = "never" if r["wipeout_at"] == float("-inf") else f"{r['wipeout_at']:>7.1%}"
         print(
-            f"  {r['leverage']:>4.2f}x  ${r['position']:>9,.0f}  ${r['loan']:>9,.0f}  "
+            f"  {r['leverage']:>5.3f}x  ${r['position']:>9,.0f}  ${r['loan']:>9,.0f}  "
             f"{r['effective_rate']:>6.2%}   ${r['annual_interest']:>9,.0f}   "
             f"{r['interest_pct_of_equity']:>9.2%}   {call:>14}   {gone:>12}"
         )
@@ -131,10 +172,12 @@ def main() -> None:
         "\nBoth assume a close-to-close move with no intraday gap and no rebalancing"
         "\non the way down -- a real liquidation is worse on all three counts."
     )
-    if len(rows) > 1:
+    if args.leverage:
+        print_band(args.leverage, args.band)
+    else:
         print(
-            "\nFor context, this repo's conclusion is 1.0x, with 1.25x the most that"
-            "\nany robustness cut supports. See README.md before using the wide end."
+            "\nFor context, this repo's conclusion is 1.0x, with half Kelly at 1.075x."
+            "\nPass --leverage to also get the no-trade band for a target."
         )
 
 

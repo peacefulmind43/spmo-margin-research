@@ -84,6 +84,8 @@ def simulate_paths(
     contribution_mode: str = "deleverage",
     interest_tax_shield: float = 0.0,
     intraday_dip: float = 0.0,
+    rebalance_cost: float = 0.0002,
+    band: float = 0.25,  # must match Account.band, or the twins disagree
 ) -> dict[str, np.ndarray]:
     """Step many return paths through the margin account simultaneously.
 
@@ -91,8 +93,8 @@ def simulate_paths(
     performance measurement, so results stay comparable across funding levels.
     """
     n_paths, horizon = paths.shape
-    period = REBALANCE_PERIODS.get(rebalance) if rebalance != "never" else None
-    if rebalance != "never" and period is None:
+    period = REBALANCE_PERIODS.get(rebalance)
+    if rebalance not in {"never", "band"} and period is None:
         raise ValueError(f"unsupported rebalance schedule: {rebalance!r}")
 
     equity = np.full(n_paths, equity0)
@@ -109,6 +111,8 @@ def simulate_paths(
     alive = np.ones(n_paths, dtype=bool)
     leverage_sum = np.zeros(n_paths)
     leverage_days = np.zeros(n_paths)
+    rebalances = np.zeros(n_paths, dtype=int)
+    rebalance_cost_paid = np.zeros(n_paths)
 
     for t in range(horizon):
         opening = equity.copy()
@@ -168,14 +172,8 @@ def simulate_paths(
             position[dead_now] = 0.0
             debit[dead_now] = 0.0
 
-        # performance for the day, measured before any new cash arrives
-        with np.errstate(divide="ignore", invalid="ignore"):
-            step = np.where(opening > 0, equity / opening - 1.0, 0.0)
-        twr *= 1.0 + np.clip(step, -1.0, None)
-        peak = np.maximum(peak, twr)
-        max_dd = np.minimum(max_dd, twr / peak - 1.0)
-
         # 4. new cash arrives
+        added = np.zeros(n_paths)
         if monthly_contribution and t % CONTRIBUTION_PERIOD == 0:
             if contribution_mode == "invest":
                 position[alive] += monthly_contribution
@@ -185,14 +183,34 @@ def simulate_paths(
                 raise ValueError(f"unknown contribution_mode: {contribution_mode!r}")
             equity[alive] += monthly_contribution
             contributed[alive] += monthly_contribution
+            added[alive] = monthly_contribution
 
+        # 5. rebalance back to target -- on a schedule, or when a band is breached
+        if rebalance == "band":
+            with np.errstate(divide="ignore", invalid="ignore"):
+                held = np.where(equity > 0, position / equity, leverage)
+            due = alive & (np.abs(held / leverage - 1.0) > band)
+        else:
+            due = alive if (period is not None and t % period == 0) else np.zeros_like(alive)
+        if due.any():
+            target = leverage * equity[due]
+            cost = np.abs(target - position[due]) * rebalance_cost
+            equity[due] -= cost
+            rebalance_cost_paid[due] += cost
+            rebalances[due] += 1
+            position[due] = leverage * equity[due]
+            debit[due] = position[due] - equity[due]
+
+        # Performance for the day: everything that happened to the account except the
+        # deposit. This has to come after the rebalance, or its cost is dropped from
+        # the return series -- the scalar simulator measures the same way, which is
+        # what the equivalence test caught when this was ordered wrongly.
         with np.errstate(divide="ignore", invalid="ignore"):
+            step = np.where(opening > 0, (equity - added) / opening - 1.0, 0.0)
             worst_vs_in = np.minimum(worst_vs_in, equity / contributed)
-
-        # 5. scheduled rebalance back to target leverage
-        if period is not None and t % period == 0:
-            position[alive] = leverage * equity[alive]
-            debit[alive] = position[alive] - equity[alive]
+        twr *= 1.0 + np.clip(step, -1.0, None)
+        peak = np.maximum(peak, twr)
+        max_dd = np.minimum(max_dd, twr / peak - 1.0)
 
         # a fixed dollar loan lets leverage decay, so record what it actually was
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -214,6 +232,8 @@ def simulate_paths(
         "total_contributed": contributed,
         "terminal_vs_contributed": equity / contributed,
         "worst_vs_contributed": worst_vs_in,
+        "rebalances": rebalances,
+        "rebalance_cost_paid": rebalance_cost_paid,
         "mean_leverage": np.divide(
             leverage_sum,
             leverage_days,

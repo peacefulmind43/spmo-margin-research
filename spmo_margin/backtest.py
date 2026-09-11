@@ -45,6 +45,9 @@ class Account:
     contribution_mode: str = "deleverage"
     interest_tax_shield: float = 0.0
     intraday_dip: float = 0.0
+    # commission plus half-spread on the notional traded. Without this a rebalance
+    # is free and the optimal no-trade band is trivially zero.
+    rebalance_cost: float = 0.0002
 
     def borrow_rate(self, loan: float, benchmark: float) -> float:
         if self.benchmark_override is not None:
@@ -90,6 +93,9 @@ def simulate(returns: np.ndarray, benchmark: np.ndarray, account: Account) -> di
     interest_paid = 0.0
     liquidation_cost = 0.0
     margin_calls = 0
+    rebalances = 0
+    traded_notional = 0.0
+    rebalance_cost_paid = 0.0
     ruin_day = -1
     contributions = np.zeros(n)
 
@@ -163,8 +169,15 @@ def simulate(returns: np.ndarray, benchmark: np.ndarray, account: Account) -> di
             eq += account.monthly_contribution
             contributions[t] = account.monthly_contribution
 
-        # 5. scheduled rebalance puts the account back on target
+        # 5. scheduled rebalance puts the account back on target, at a cost
         if _rebalance_due(t, position / eq, account):
+            target = account.leverage * eq
+            traded = abs(target - position)
+            cost = traded * account.rebalance_cost
+            eq -= cost
+            rebalance_cost_paid += cost
+            traded_notional += traded
+            rebalances += 1
             position = account.leverage * eq
             debit = position - eq
 
@@ -179,6 +192,9 @@ def simulate(returns: np.ndarray, benchmark: np.ndarray, account: Account) -> di
         monthly_contribution=account.monthly_contribution,
         liquidation_cost=liquidation_cost,
         margin_calls=margin_calls,
+        rebalances=rebalances,
+        traded_notional=traded_notional,
+        rebalance_cost_paid=rebalance_cost_paid,
         ruin_day=ruin_day,
         max_leverage_reached=(
             float(np.nanmax(leverage_path))

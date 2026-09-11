@@ -52,9 +52,59 @@ to 2.0x buys 3.0 and costs 7.9. The trade is never better than roughly fair, and
 gets worse at every step. 1.25x is where it is least bad; 1.0x is where you stop
 paying for it at all.
 
-For a concrete position at any of these levels — loan size, the real interest bill,
-and the exact price decline that triggers a call — run
-`python scripts/position_calculator.py --equity <your equity>`.
+### If you want one number
+
+Half Kelly on this build is **1.075x**, and that is as specific as the evidence
+allows. The digits after the first are noise: resampling 104 one-year blocks and
+re-optimising each time puts a 90% interval on full Kelly of **[1.14x, 3.11x]**, so
+half Kelly carries a standard error of about **±0.30**. Read it as "just under 1.1x",
+and treat anyone quoting three decimals — including this repo — with suspicion.
+
+Stating it as relative risk aversion is more honest than calling it a convention.
+With `f* = (mu - r) / (gamma * sigma^2)`:
+
+| Risk aversion | Leverage |
+|---|---|
+| gamma = 1 (log utility, full Kelly) | 2.150x |
+| gamma = 1.5 | 1.467x |
+| **gamma = 2 (half Kelly)** | **1.075x** |
+| gamma = 3 | 0.734x |
+
+And a practical note that cuts against the whole exercise: at 1.075x on a $50k
+account the loan is $3,750, the interest is $200/yr, and the extra expected return is
+`0.075 × (12.95% − 5.13%) = 0.59%/yr` — about $293. That is a thin reward for
+carrying a margin loan, the record-keeping, and a worse left tail.
+
+### The no-trade band
+
+Leverage moves as `L' = L(1+x) / (1 + Lx)` for a cumulative market move `x`, which
+means **a band is nearly moot at low leverage and urgent at high leverage**:
+
+| Cumulative move | from 1.075x | from 1.25x | from 2.0x | from 3.0x |
+|---|---|---|---|---|
+| −10% | 1.084x | 1.286x | 2.250x | 3.857x |
+| −20% | 1.096x | 1.333x | 2.667x | 6.000x |
+| −30% | 1.111x | 1.400x | 3.500x | 21.000x |
+| −50% | 1.162x | 1.667x | wiped out | wiped out |
+
+At 1.075x a 20% fall moves leverage by 1.9%. At 3x it doubles it. So:
+
+**Target 1.075x, rebalance only when leverage leaves [1.021x, 1.129x].**
+
+- The upper bound is reached after a **−38.8%** cumulative decline. It is the bound
+  that does the work: it delevers you in a sustained bear market, which is the one
+  regime that actually threatens a levered account.
+- The lower bound needs a **+235%** run, so in practice it never binds. That means
+  leverage decays after gains and the loan is never topped up — deliberate, and it
+  is the cheap half of the asymmetry.
+- Sweeping band widths from 0% to 50%, the band triggers a median of **zero times
+  per decade** at anything above 5%, and the 5th-percentile CAGR varies by less than
+  0.1 points across the whole range. Rebalancing frequency is simply not a
+  load-bearing decision at this leverage — which is itself a reason to prefer it to
+  a leverage level where it would be.
+
+`python scripts/position_calculator.py --equity 50000 --leverage 1.075` prints the
+position, the interest bill, the call distance and this band for any account size.
 
 ## Why not more
 
