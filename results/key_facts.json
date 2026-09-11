@@ -51,15 +51,15 @@
       "blended_annual_rate": 0.0468
     }
   ],
-  "growth_optimal": 1.5728868827531317,
+  "growth_optimal": 2.2045275115999776,
   "robust_optimal_p05": 1.0,
   "robust_optimal_p25": 1.0,
   "drawdown_budgets": {
     "-25%": NaN,
     "-30%": NaN,
-    "-35%": NaN,
-    "-40%": 1.0996448467774242,
-    "-50%": 1.395646296613092
+    "-35%": 1.0361744944541968,
+    "-40%": 1.1880174398980747,
+    "-50%": 1.5082217742187642
   },
   "robust_optimal_high_rates": 1.0,
   "p05_optimal_range_across_seeds": [

@@ -44,6 +44,7 @@ class Account:
     monthly_contribution: float = 0.0
     contribution_mode: str = "deleverage"
     interest_tax_shield: float = 0.0
+    intraday_dip: float = 0.0
 
     def borrow_rate(self, loan: float, benchmark: float) -> float:
         if self.benchmark_override is not None:
@@ -103,8 +104,15 @@ def simulate(returns: np.ndarray, benchmark: np.ndarray, account: Account) -> di
             cash = -debit
             debit -= cash * credit_rate(cash, benchmark[t]) / ACCRUAL_DIVISOR
 
-        # 2. the market moves the position
-        position *= 1.0 + returns[t]
+        # 2. the market moves the position. A broker tests the requirement against
+        # the intraday low, not the close, so the day is walked in two steps: down to
+        # the low (where a liquidation would happen, at that price) and then on to
+        # the close. Getting sold at the low and missing the rebound is the whipsaw
+        # a close-only simulation cannot see. intraday_dip = 0 collapses this back to
+        # a single close-to-close step.
+        close_factor = 1.0 + returns[t]
+        low_factor = max(close_factor + account.intraday_dip, 1e-9)
+        position *= low_factor
         eq = position - debit
 
         if eq <= 0 or position <= 0:
@@ -127,6 +135,15 @@ def simulate(returns: np.ndarray, benchmark: np.ndarray, account: Account) -> di
                 equity_curve[t + 1 :] = 0.0
                 ruin_day = t
                 break
+
+        # whatever position survived the low now rides to the close
+        position *= close_factor / low_factor
+        eq = position - debit
+        if eq <= 0 or position <= 0:
+            equity_curve[t + 1 :] = 0.0
+            leverage_path[t] = np.nan
+            ruin_day = t
+            break
 
         leverage_path[t] = position / eq
 

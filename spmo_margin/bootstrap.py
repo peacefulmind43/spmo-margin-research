@@ -83,6 +83,7 @@ def simulate_paths(
     monthly_contribution: float = 0.0,
     contribution_mode: str = "deleverage",
     interest_tax_shield: float = 0.0,
+    intraday_dip: float = 0.0,
 ) -> dict[str, np.ndarray]:
     """Step many return paths through the margin account simultaneously.
 
@@ -126,8 +127,10 @@ def simulate_paths(
             cash = -debit[lending]
             debit[lending] -= cash * _credit_rate_vec(cash, benchmark) / ACCRUAL_DIVISOR
 
-        # 2. the market moves the position
-        position[alive] *= 1.0 + paths[alive, t]
+        # 2. the market moves the position, low first then close (see backtest.py)
+        close_factor = 1.0 + paths[:, t]
+        low_factor = np.maximum(close_factor + intraday_dip, 1e-9)
+        position[alive] *= low_factor[alive]
         equity = np.where(alive, position - debit, 0.0)
 
         dead_now = alive & ((equity <= 0) | (position <= 0))
@@ -154,6 +157,16 @@ def simulate_paths(
                 equity[broke] = 0.0
                 position[broke] = 0.0
                 debit[broke] = 0.0
+
+        # whatever position survived the low now rides to the close
+        position[alive] *= (close_factor / low_factor)[alive]
+        equity = np.where(alive, position - debit, 0.0)
+        dead_now = alive & ((equity <= 0) | (position <= 0))
+        if dead_now.any():
+            alive &= ~dead_now
+            equity[dead_now] = 0.0
+            position[dead_now] = 0.0
+            debit[dead_now] = 0.0
 
         # performance for the day, measured before any new cash arrives
         with np.errstate(divide="ignore", invalid="ignore"):

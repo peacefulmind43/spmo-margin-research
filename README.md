@@ -8,71 +8,84 @@ real tiered financing cost and a simulation that can margin-call you.
 
 ## The answer
 
-**1.0x. Don't use margin on this.**
+**1.0x, and 1.25x is the most any robustness cut supports.**
 
-An earlier version of this study said 1.5x. That answer was held up by three
-modelling biases, and removing them cut full Kelly from 3.1x to 1.57x — which puts
-*half* Kelly at 0.79x, below unlevered. The audit that found them is
-[below](#the-overfitting-audit), and it is the most important section here.
+The number this repo reports has moved twice, in both directions, as errors were
+found. That history is in [the audit](#the-overfitting-audit) — the most important
+section here, and the one to read before using any of this. What survived every pass
+is not a point estimate but a shape: **there is no leverage level at which the bad
+outcomes get better.**
 
 On the honest build — real market and momentum factor returns back to 1926, the
-in-sample alpha set to zero, idiosyncratic risk restored, financing charged for
+fund's own alpha set to zero, idiosyncratic risk restored, financing charged for
 calendar days:
 
 | Criterion | Optimal leverage |
 |---|---|
 | Maximise the 5th percentile of 10-year CAGR | **1.00x** |
 | Maximise the 25th percentile | **1.00x** |
-| Half Kelly | **0.79x** |
-| Full Kelly | **1.57x** |
-| Maximise *median* 10-year CAGR | **1.56x** |
+| Largest position with median drawdown inside −35% | **1.04x** |
+| Half Kelly | **1.08x** (0.83x if momentum's premium is not real) |
+| Largest position with median drawdown inside −50% | **1.51x** |
+| Full Kelly | **2.15x** |
+| Maximise *median* 10-year CAGR | **2.20x** |
 
-The 5th-percentile answer is 1.00x — the floor of the grid, meaning it would go lower
-if shorting were on the menu — and it stays at 1.00x across **every** robustness cut
-tried: four start dates from 1926 to 1990, five bootstrap block lengths from 5 to 63
-days, and even with the discredited alpha added back. That is a far more stable
-finding than the 1.5x it replaced.
+The 5th-percentile answer is 1.00x — the floor of the grid — and it stays at 1.00x
+across **every** robustness cut tried: four start dates from 1926 to 1990, five
+bootstrap block lengths from 5 to 63 days, five bootstrap seeds, the full range of
+momentum-premium haircuts, and even with the discredited alpha added back. Nothing
+else in this repo is that stable.
 
-The distribution behind it, bootstrapped over 10-year horizons:
+The distribution, bootstrapped over 10-year horizons:
 
 | Leverage | 5th pct CAGR | median CAGR | median max drawdown | P(drawdown < −50%) |
 |---|---|---|---|---|
-| 1.0x | **−0.8%** | 9.5% | −37% | 14% |
-| 1.25x | −2.9% | 9.9% | −45% | 36% |
-| 1.5x | −5.3% | 10.1% | −53% | 60% |
-| 2.0x | −10.8% | 9.8% | −68% | 90% |
-| 3.0x | −25.2% | 5.0% | −87% | 100% |
+| 1.0x | **+1.7%** | 12.0% | −34% | 8% |
+| **1.25x** | **+0.1%** | 13.1% | −42% | 26% |
+| 1.5x | −1.7% | 14.0% | −50% | 49% |
+| 2.0x | −6.2% | 15.0% | −63% | 83% |
+| 3.0x | −18.6% | 13.2% | −83% | 100% |
 
-Note the median column: it peaks at 1.5x and by 3.0x is **worse than unlevered**.
-The version of this study that used SPMO's own decade had the median rising
-monotonically to 3x and beyond. Note also the first row — even unlevered, the
-5th-percentile ten-year return over a century-long sample is slightly negative.
-That is what equity risk actually looks like once the sample includes 1929.
+Read it as a price list. Going from 1.0x to 1.25x buys 1.1 points of median CAGR and
+costs 1.6 points of 5th-percentile CAGR. Going to 1.5x buys 2.0 and costs 3.4. Going
+to 2.0x buys 3.0 and costs 7.9. The trade is never better than roughly fair, and it
+gets worse at every step. 1.25x is where it is least bad; 1.0x is where you stop
+paying for it at all.
+
+For a concrete position at any of these levels — loan size, the real interest bill,
+and the exact price decline that triggers a call — run
+`python scripts/position_calculator.py --equity <your equity>`.
 
 ## Why not more
 
-Because leverage buys the middle of the distribution with the tails, and on the
-honest build it barely buys the middle either.
+Leverage does win the median here, and over the full century it wins outright. The
+case against it rests on three things that no amount of risk tolerance fixes.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="results/figures/growth_vs_downside_dark.png">
   <img alt="Median 10-year CAGR barely moves with leverage while the 5th percentile falls from 1.0x and drawdowns deepen without limit" src="results/figures/growth_vs_downside_light.png">
 </picture>
 
-The median gains about 60 basis points between 1.0x and its 1.5x peak, then gives
-them back. The 5th percentile falls from the very first turn of leverage. The
-drawdown never stops deepening: at 1.5x the median worst drawdown is −53% and 60% of
-paths breach −50%; at 2x it is −68% and 90%.
+**One: the 5th percentile falls from the very first turn of leverage.** Not from
+1.5x, not from 2x — from 1.0x. Every level above unlevered makes a disappointing
+decade worse, and by 2x a disappointing decade is −6.2%/yr compounded.
 
-That is the whole trade, and it is a bad one. You are paying a large and certain
-increase in downside for a small and uncertain increase in the middle.
+**Two: the drawdowns are not survivable by a person.** Over the century path, max
+drawdown is −79% unlevered, −92% at 1.5x, −98% at 2x and −99.9% at 3x. Even in a
+typical bootstrapped decade, 1.5x has a coin-flip chance of a −50% drawdown. The
+median CAGR at 2x is only available to someone who held a −98% drawdown without
+selling, and that person does not exist.
 
-**Leverage this size does not usually bankrupt you, it ruins you.** Because the
+**Three: leverage this size does not bankrupt you, it ruins you.** Because the
 account is rebalanced back to target, a fall in equity also cuts the position, which
 delevers you automatically. Wiping out needs a single-day gap worse than −1/L — about
 −33% at 3x — and the worst day in the sample is −19%, so `prob_ruin` stays near zero
-at every level tested. That is not reassurance. A 3x account gets through the full
-century with a −99.9% drawdown and 129 margin calls, and nobody holds that.
+at every level tested. That is not reassurance. A 3x account gets through the century
+with a −99.9% drawdown and 117 margin calls. It technically ends ahead of unlevered.
+Nobody collects that.
+
+And the one bias the audit could not remove — SPMO was chosen *because* it has done
+well — points toward leverage, so the true case is weaker than the tables show.
 
 ## The full history, including the parts SPMO missed
 
@@ -84,26 +97,29 @@ intercept is set to zero):
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="results/figures/equity_curves_dark.png">
-  <img alt="Log-scale equity curves 1926-2026 at 1x, 1.5x, 2x and 3x; 3x ends far behind 1x after a -99.9% drawdown in the Depression" src="results/figures/equity_curves_light.png">
+  <img alt="Log-scale equity curves 1926-2026 at 1x, 1.5x, 2x and 3x; terminal wealth peaks near 2.25x, and 3x survives a -99.9% drawdown in the Depression" src="results/figures/equity_curves_light.png">
 </picture>
 
-Over a century, **$1 unlevered becomes $12,714 and $1 at 3x becomes $140.** Terminal
-wealth peaks at 1.75x and collapses above it. The 3x line spends thirty years
-underwater after 1929 — it does not regain its 1929 high until the 1960s.
+Terminal wealth over the century rises to a peak at 2.25x and falls away above it —
+so on this single path, leverage up to about 2x genuinely wins. It wins by
+surviving a −98% drawdown in the 1930s and 117 margin calls at 3x. The chart is the
+strongest case for leverage in this repo and also its own refutation: look at where
+the dark line goes between 1930 and 1950, and ask whether the account would still
+have been open in 1955 to collect the rest.
 
 What each level kept through the real bear markets, as a fraction of starting equity:
 
 | Episode | 1x | 1.5x | 2x | 2.5x | 3x |
 |---|---|---|---|---|---|
-| Great Depression (1929–32) | 0.29 | 0.13 | 0.05 | 0.02 | **0.00** |
-| Dot-com bust (2000–02) | 0.71 | 0.53 | 0.38 | 0.27 | 0.17 |
-| Global financial crisis (2007–09) | 0.54 | 0.38 | 0.25 | 0.16 | **0.09** |
+| Dot-com bust (2000–02) | 0.65 | 0.46 | 0.32 | 0.21 | **0.12** |
+| Global financial crisis (2007–09) | 0.64 | 0.47 | 0.33 | 0.22 | **0.14** |
 | Covid crash (2020) | 0.91 | 0.85 | 0.79 | 0.64 | 0.53 |
 | 2022 rate shock | 0.90 | 0.82 | 0.75 | 0.68 | 0.61 |
 
-1929–32 is the one that settles it. At 2x you keep a nickel on the dollar; at 3x you
-are gone. Any argument for leverage here is an argument that nothing like 1929 can
-happen again.
+The two sustained bear markets each cut a 2x account by two thirds and a 3x account
+by seven eighths. Note how much gentler the two *fast* crashes were at every level:
+V-shaped panics are survivable on margin, slow grinds are not, and you do not get to
+choose which one you get.
 
 ## Kelly is not a number, it is a function of a guess
 
@@ -119,20 +135,29 @@ decimal places; drift you cannot measure at all over a human lifetime.
 | Sample | mu | sigma | Full Kelly | Half Kelly |
 |---|---|---|---|---|
 | SPMO's own decade, 2015–2026 | 19.7% | 20.4% | 3.29x | 1.65x |
-| 1926–2026, alpha believed | 13.9% | 19.0% | 2.37x | 1.19x |
-| **1926–2026, alpha zeroed** | **10.9%** | **19.0%** | **1.57x** | **0.79x** |
+| 1926–2026, alpha believed | 15.9% | 18.9% | 2.94x | 1.47x |
+| **1926–2026, alpha zeroed** | **13.0%** | **18.9%** | **2.15x** | **1.08x** |
+| 1926–2026, momentum premium gone too | 11.1% | 18.9% | 1.66x | 0.83x |
 
-The peak moves by more than a factor of two on the drift assumption alone, and the
-whole of that movement is `mu` — sigma barely budges. This is why quoting a Kelly
-number without quoting the standard error on its drift estimate is meaningless.
+The peak moves by a factor of two on the drift assumption alone, and the whole of
+that movement is `mu` — sigma barely budges across the rows. Quoting a Kelly number
+without the standard error on its drift estimate is meaningless: over 104 years the
+standard error on `mu` here is still 1.9%/yr, which puts a 95% interval on full Kelly
+of roughly **[0.6x, 2.6x]**. A century of data does not pin down the answer to within
+a factor of four.
 
 Two features of the curves argue for halving whatever you compute:
 
-- **The peaks are flat.** Backing off from the peak costs very little growth.
+- **The peaks are flat.** Backing off from the peak costs very little growth. Going
+  *past* it costs growth *and* adds risk — 1.0x and 2.0x have nearly the same median
+  CAGR in the table above, with −34% against −63% median drawdown.
 - **The right-hand side is a cliff whose position you do not know.** If the true
-  optimum is 1.57x and you sized for 3.29x, you are far past the peak, taking much
-  more risk for *less* growth. Half Kelly on the honest estimate is 0.79x — the
-  method's own recommendation is less than no leverage.
+  optimum is 1.66x and you sized off SPMO's own decade at 3.29x, you are far past the
+  peak, taking much more risk for less growth.
+
+Half Kelly on the honest build is 1.08x, and 0.83x if momentum's premium turns out
+not to be real. That is the whole recommendation, arrived at independently of the
+5th-percentile argument.
 
 ## The overfitting audit
 
@@ -178,6 +203,32 @@ year's cost. Real margin interest accrues every calendar day. This one was a pla
 bug, worth about 1.5% a year of borrowing cost at 5.13%, and there is now a
 regression test pinning it (`test_one_year_of_financing_covers_calendar_days_not_trading_days`).
 
+### Two more errors, pointing the other way
+
+A second audit pass found two mistakes that had been biasing *against* leverage. They
+belong here for the same reason the others do — a review that only ever finds
+convenient errors is not a review.
+
+**4. The synthetic drift depended on a coin flip.** Resampled residuals are meant to
+supply idiosyncratic variance, not drift. But OLS residuals are mean-zero only
+in-sample; any single resampled draw has a sample mean worth about 1%/yr of noise at
+this length, and that noise landed straight in `mu`, which is the numerator of Kelly.
+One unlucky seed was holding `mu` **2.1%/yr below** its correct value. The draw is now
+demeaned over exactly the days it is used on, which makes `mu` deterministic — it
+equals the factor decomposition to twelve decimal places, and there is a test pinning
+that. The decomposition is worth seeing:
+
+| Component | Contribution to mu |
+|---|---|
+| market (0.969 × market excess) | 6.98%/yr |
+| momentum (0.315 × UMD premium) | 2.12%/yr |
+| risk-free | 3.11%/yr |
+| **total** | **12.95%/yr** |
+
+**5. Pre-1954 financing was overstated by 43%.** Ken French's daily risk-free series
+annualises over trading days; it was being scaled by the 360-day interest basis.
+Checked against known levels after the fix: 2024 gives 5.0%, 1981 gives 13.6%.
+
 ### What each was worth
 
 | Build | Full Kelly | Half Kelly | 5th-pct optimal |
@@ -186,34 +237,49 @@ regression test pinning it (`test_one_year_of_financing_covers_calendar_days_not
 | + financing charged for calendar days | 2.99x | 1.50x | **1.00x** |
 | + in-sample alpha removed | 2.17x | 1.09x | 1.00x |
 | + factor-built history back to 1926 | 2.66x | 1.33x | 1.00x |
-| **+ idiosyncratic risk restored (honest)** | **1.57x** | **0.79x** | **1.00x** |
+| **+ idiosyncratic risk restored (honest)** | **2.15x** | **1.08x** | **1.00x** |
 
-Full Kelly halved. Note row four *raising* Kelly relative to row three — that is the
-residual-risk bias isolated: the factor build alone has a lower sigma until the
-idiosyncratic component is put back.
+Full Kelly fell by a third overall. Note row four *raising* Kelly relative to row
+three — that is the residual-risk bias isolated: the factor build alone has a lower
+sigma until the idiosyncratic component is put back.
+
+### The question the audit cannot settle
+
+Zeroing the fund's own alpha still leaves the **momentum factor premium** in, worth
+2.12%/yr at a 0.315 loading. That premium has a century of evidence behind it, far
+more than any single fund's record. It is also the most heavily published anomaly in
+finance, and published anomalies decay. So the sweep below keeps momentum's
+volatility and crash risk and varies only how much of its *payment* you credit:
+
+| Momentum premium | mu | Full Kelly | Half Kelly | 5th-pct optimal |
+|---|---|---|---|---|
+| believed in full | 13.0% | 2.15x | 1.08x | **1.00x** |
+| halved | 12.1% | 1.91x | 0.95x | **1.00x** |
+| gone, risk kept | 11.1% | 1.66x | 0.83x | **1.00x** |
 
 ### What is still not tested away
-
-The remaining free parameters do not move the answer:
 
 | Robustness check | Range tried | 5th-pct optimal |
 |---|---|---|
 | start date | 1926, 1946, 1970, 1990 | 1.00x in all four |
 | bootstrap block length | 5, 10, 21, 42, 63 days | 1.00x in all five |
 | bootstrap seed | five seeds | 1.00x in all five |
+| momentum premium haircut | 0% to 100% | 1.00x throughout |
 | alpha believed vs zeroed | both | 1.00x in both |
+| intraday liquidation modelled | close-only to p95 adverse low | no change below 2.5x |
 
-Full Kelly does move with the start date — 1.57x on the full sample against 2.13x
+Full Kelly does move with the start date — 2.15x on the full sample against 2.91x
 post-war — so how much of the case rests on 1929 is a fair question to press. But the
 5th-percentile answer is 1.00x whichever century you choose, and half Kelly never
-exceeds 1.07x. Reproduce with `python scripts/overfitting_audit.py`.
+exceeds 1.45x under any cut. Reproduce with `python scripts/overfitting_audit.py`.
 
 ### The bias that cannot be audited
 
-SPMO was chosen for this study *because it has done well*. Nobody ran this analysis
+SPMO was chosen for this study *because it has done well*. Nobody runs this analysis
 on a momentum ETF that disappointed, because nobody thinks to lever one of those. No
 amount of care inside the model corrects for selection on the dependent variable at
-the point the ticker was picked — it can only be named, as it is here.
+the moment the ticker was picked — it can only be named, as it is here, and it points
+toward leverage.
 
 ## Financing cost is modelled properly, and it matters
 
@@ -281,17 +347,16 @@ the rows compare the *shape* of the leverage response rather than account size:
 
 | Savings rate | | 1.0x | 1.5x | 2.0x | 2.5x | 3.0x |
 |---|---|---|---|---|---|---|
-| none | median | 1.00 | 1.07 | 1.06 | 0.91 | 0.68 |
-| none | **5th pct** | 1.00 | 0.62 | 0.35 | 0.16 | **0.06** |
-| +50%/yr | median | 1.00 | 1.08 | 1.11 | 1.06 | 0.96 |
-| +50%/yr | **5th pct** | 1.00 | 0.78 | 0.59 | 0.42 | **0.28** |
+| none | median | 1.00 | 1.19 | 1.31 | 1.28 | 1.08 |
+| none | **5th pct** | 1.00 | 0.72 | 0.45 | 0.24 | **0.11** |
+| +50%/yr | median | 1.00 | 1.16 | 1.29 | 1.34 | 1.27 |
+| +50%/yr | **5th pct** | 1.00 | 0.82 | 0.64 | 0.48 | **0.34** |
 
 Read the 5th-percentile rows: **every entry is below 1.00, at every savings rate.**
 There is no contribution level at which leverage improves the bad outcome. Saving
-harder softens the penalty (0.06 → 0.28 at 3x) because deposits dilute the damage
-done to the early balance, but it never converts the penalty into a gain. And the
-median rows show what is being bought with all that downside: a peak of 1.07x–1.11x,
-turning negative by 2.5x.
+harder softens the penalty (0.11 → 0.34 at 3x) because deposits dilute the damage
+done to the early balance, but it never converts the penalty into a gain — and the
+softening is the *only* thing contributions do here.
 
 Meanwhile the savings rate moves outcomes by multiples rather than fractions, and it
 is the only lever here that improves both tails at once.
@@ -304,21 +369,21 @@ glance it dominates — 3.0x initial gives a 5.1% 5th-percentile CAGR against �
 constant 3.0x, with a 34% chance of a −50% drawdown against 96%.
 
 It is an artefact of measuring the wrong thing. Tracking what leverage was actually
-*held*, "3.0x initial" under a fixed loan averages **1.47x** and ends at 1.13x. Once
+*held*, "3.0x initial" under a fixed loan averages **1.57x** and ends at 1.20x. Once
 matched on average leverage the advantage evaporates:
 
 | Strategy | Initial | Mean held | 5th pct CAGR | P(drawdown < −50%) |
 |---|---|---|---|---|
-| constant leverage | 1.25x | 1.25x | 5.7% | 9% |
-| fixed dollar loan | 2.0x | 1.26x | 5.8% | 15% |
-| constant leverage | 1.5x | 1.50x | 5.5% | 24% |
-| fixed dollar loan | 3.0x | 1.47x | 5.1% | 34% |
+| constant leverage | 1.25x | 1.25x | +0.2% | 27% |
+| fixed dollar loan | 1.75x | 1.24x | +0.0% | 30% |
+| constant leverage | 1.5x | 1.50x | −1.4% | 50% |
+| fixed dollar loan | 2.5x | 1.46x | −2.4% | 50% |
 
-At matched average leverage the two are within noise on the 5th percentile, and the
-fixed loan is *worse* on drawdown probability — it concentrates its risk early, when
-the loan is large relative to the account. The funding strategy does not create
-anything; it only changes your effective average leverage. Choose the average you
-want and pick whichever mechanism gets you there.
+At matched average leverage the two are within noise, and the fixed loan is if
+anything slightly worse — it concentrates its risk early, when the loan is large
+relative to the account. The funding strategy does not create anything; it only
+changes your effective average leverage. Choose the average you want and pick
+whichever mechanism gets you there.
 
 Reproduce with `python scripts/funding_strategies.py`.
 
@@ -379,7 +444,8 @@ pip install -e ".[dev]"
 python scripts/run_analysis.py          # the main study
 python scripts/overfitting_audit.py     # what each bias was worth -- read this one
 python scripts/funding_strategies.py    # contributions and funding strategy
-pytest                                  # 49 tests
+python scripts/position_calculator.py --equity 50000   # a concrete position
+pytest                                  # 89 tests
 ```
 
 Data comes from Yahoo Finance (SPMO, SPY total return), FRED (`DFF`, the Fed Funds
@@ -392,8 +458,10 @@ hand-computed values, checks that an unlevered account reproduces the raw return
 exactly, checks that a flat market at 2x costs precisely one unit of compounded
 financing, checks that deposits are never counted as returns (a flat market with
 contributions must report exactly 0% time-weighted), and checks the fast vectorised
-bootstrap simulator against the readable day-by-day one across 36
-leverage/schedule/funding combinations, and pins the calendar-day financing accrual. That last test is what caught a missing
+bootstrap simulator against the readable day-by-day one across 72
+leverage/schedule/funding/intraday combinations, pins the calendar-day financing
+accrual, and pins the invariant that the synthetic drift cannot depend on which
+residual draw came up. That last test is what caught a missing
 credit-interest branch in the vectorised twin, which only became reachable once
 contributions could push the balance from debit into cash.
 
@@ -408,6 +476,8 @@ contributions could push the balance from debit into cash.
 | `spmo_margin/kelly.py` | Gaussian and empirical log-growth optimum |
 | `spmo_margin/optimal.py` | the several meanings of "optimal" |
 | `spmo_margin/data.py` | prices, Fed Funds, Fama-French factors, history reconstruction |
+| `scripts/overfitting_audit.py` | the bias audit and every sensitivity sweep |
+| `scripts/position_calculator.py` | loan, interest bill and margin-call distance |
 | `results/` | every table as CSV, `key_facts.json`, charts |
 
 ## What would change the answer
@@ -423,9 +493,16 @@ Honest limitations, roughly in order of how much they should worry you:
   the 1926–2015 factor record never showed.
 - **The regime is not constant.** 1929–32 had no circuit breakers, no deposit
   insurance and 10% initial margin requirements. Including it is what pulls full
-  Kelly from 2.13x to 1.57x, so a reader who thinks that era is uninformative should
+  Kelly from 2.91x to 2.15x, so a reader who thinks that era is uninformative should
   read the post-war row of the sensitivity table instead — the 5th-percentile answer
   is 1.00x either way.
+- **Factor loadings are assumed constant and are not.** Over 250-day rolling windows
+  SPMO's momentum beta ranges from −0.01 to 0.61 and its market beta from 0.03 to
+  1.20. The whole century is reconstructed from single full-sample loadings of 0.969
+  and 0.315, which is a strong assumption doing a lot of work.
+- **Dividend withholding is not modelled.** Total returns here assume full dividend
+  reinvestment. A non-US holder loses 15% of distributions under a treaty and 30%
+  without one, which is a permanent drag of roughly 15–30bp/yr on a ~1% yield.
 - **Daily closes hide intraday risk.** Margin calls are evaluated on closing prices.
   A real broker liquidates on intraday lows, so margin-call counts here are floors.
 - **Block bootstrap cannot invent a worse crash than the sample contains,** and it

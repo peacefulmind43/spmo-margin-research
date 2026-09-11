@@ -82,7 +82,8 @@ def test_tier_crossing_lowers_the_effective_cost():
     "contribution,mode",
     [(0.0, "deleverage"), (1_000.0, "deleverage"), (1_000.0, "invest")],
 )
-def test_vectorised_matches_scalar(leverage, rebalance, contribution, mode):
+@pytest.mark.parametrize("dip", [0.0, -0.005])
+def test_vectorised_matches_scalar(leverage, rebalance, contribution, mode, dip):
     rng = np.random.default_rng(42)
     rets = rng.normal(0.0003, 0.013, 1200)
     bm = 0.0363
@@ -95,6 +96,7 @@ def test_vectorised_matches_scalar(leverage, rebalance, contribution, mode):
             rebalance=rebalance,
             monthly_contribution=contribution,
             contribution_mode=mode,
+            intraday_dip=dip,
         ),
     )
     vector = simulate_paths(
@@ -104,6 +106,7 @@ def test_vectorised_matches_scalar(leverage, rebalance, contribution, mode):
         rebalance=rebalance,
         monthly_contribution=contribution,
         contribution_mode=mode,
+        intraday_dip=dip,
     )
 
     assert vector["cagr"][0] == pytest.approx(scalar["stats"]["cagr"], rel=1e-9)
@@ -198,3 +201,71 @@ def test_one_year_of_financing_covers_calendar_days_not_trading_days():
 
     naive = equity0 * ((1 + (bm + spread) / 360) ** TRADING_DAYS_PER_YEAR - 1)
     assert out["stats"]["interest_paid"] / naive == pytest.approx(365 / 252, rel=0.02)
+
+
+def test_zero_intraday_dip_is_a_pure_close_to_close_step():
+    # the two-step low-then-close walk must collapse exactly to the old behaviour
+    rng = np.random.default_rng(11)
+    rets = rng.normal(0.0002, 0.02, 800)
+    bm = np.full(len(rets), 0.0363)
+    base = simulate(rets, bm, Account(leverage=2.0, rebalance="monthly"))
+    explicit = simulate(
+        rets, bm, Account(leverage=2.0, rebalance="monthly", intraday_dip=0.0)
+    )
+    assert explicit["stats"]["cagr"] == pytest.approx(base["stats"]["cagr"], rel=1e-12)
+
+
+def test_intraday_dip_creates_the_whipsaw_it_is_meant_to_model():
+    # A day that dips then closes flat. At 3x, breaching a 25% requirement needs the
+    # low to be worse than -1/9: equity/position = (1 + 3d)/(3(1 + d)) < 0.25 solves
+    # to d < -0.111. So -15% forces a sale at the low, and the position that rides
+    # back to the close is permanently smaller -- the whipsaw a close-only
+    # simulation cannot see. Unlevered is untouched by the same day.
+    rets = np.zeros(3)
+    bm = np.full(3, 0.0363)
+    flat = simulate(rets, bm, Account(leverage=3.0, rebalance="never", intraday_dip=0.0))
+    whipsawed = simulate(
+        rets, bm, Account(leverage=3.0, rebalance="never", intraday_dip=-0.15)
+    )
+    assert flat["stats"]["margin_calls"] == 0
+    assert whipsawed["stats"]["margin_calls"] >= 1
+    assert whipsawed["equity"][-1] < flat["equity"][-1]
+
+    shallow = simulate(
+        rets, bm, Account(leverage=3.0, rebalance="never", intraday_dip=-0.10)
+    )
+    assert shallow["stats"]["margin_calls"] == 0  # -10% is inside the requirement
+
+    unlevered = simulate(
+        rets, bm, Account(leverage=1.0, rebalance="never", intraday_dip=-0.15)
+    )
+    assert unlevered["stats"]["margin_calls"] == 0
+    assert unlevered["equity"][-1] == pytest.approx(unlevered["equity"][0])
+
+
+def test_synthetic_drift_does_not_depend_on_the_residual_draw():
+    # Residuals supply idiosyncratic variance, not drift. If a draw's sample mean
+    # leaks into the series it leaks into Kelly, which is drift/variance -- an
+    # earlier version of this code moved mu by 2.3%/yr on the luck of one seed.
+    from spmo_margin.data import extend_with_factors
+
+    means, vols = [], []
+    for seed in (20260910, 1, 7, 99):
+        frame, _ = extend_with_factors("SPMO", include_residual=True, seed=seed)
+        means.append(frame["ret"].mean())
+        vols.append(frame["ret"].std())
+
+    assert means == pytest.approx([means[0]] * len(means), rel=1e-12)
+    assert np.std(vols) > 0  # the draw must still change the risk, just not the drift
+
+
+def test_momentum_haircut_removes_premium_but_keeps_the_risk():
+    from spmo_margin.data import extend_with_factors
+
+    full, _ = extend_with_factors("SPMO", momentum_premium_haircut=0.0)
+    stripped, _ = extend_with_factors("SPMO", momentum_premium_haircut=1.0)
+
+    assert stripped["ret"].mean() < full["ret"].mean()
+    # volatility and the left tail must survive the haircut
+    assert stripped["ret"].std() == pytest.approx(full["ret"].std(), rel=0.02)
+    assert stripped["ret"].min() == pytest.approx(full["ret"].min(), abs=0.01)

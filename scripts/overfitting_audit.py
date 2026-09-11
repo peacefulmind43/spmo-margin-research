@@ -18,8 +18,24 @@ direction. Every one made leverage look better:
    360-day basis collects 252/360 of a year's cost. Real financing accrues every
    calendar day.
 
-This script removes them one at a time so the cost of each is visible. Run it before
-trusting any leverage number in this repo.
+A second audit pass then found two errors pointing the *other* way -- worth stating,
+because a review that only ever finds convenient errors is not a review:
+
+4. **The synthetic drift depended on a random draw.** Resampled residuals are meant
+   to supply idiosyncratic variance, not drift, but a single draw's sample mean is
+   noise worth about 1%/yr. One unlucky seed was holding mu 2.1%/yr below its correct
+   value, and mu is the numerator of Kelly. The draw is now demeaned over exactly the
+   days it is used on, which makes mu deterministic and equal to the factor
+   decomposition.
+5. **Pre-1954 financing was overstated by 43%.** Ken French's daily risk-free series
+   annualises over trading days; it was being scaled by the 360-day interest basis.
+
+The deepest question the audit cannot settle is whether to believe the momentum
+factor premium at all. Zeroing the fund's own alpha still leaves ~2.1%/yr of premium
+at a 0.32 loading. A century of evidence supports it, far more than any fund's
+record -- but momentum is the most published anomaly there is. The haircut sweep
+below prices the pessimistic case: keep momentum's volatility and crash risk, lose
+the payment for carrying it.
 
     python scripts/overfitting_audit.py [--paths 2500]
 """
@@ -147,6 +163,21 @@ def main() -> None:
     sensitivity = pd.DataFrame(sens).set_index("build")
     sensitivity.to_csv(RESULTS / "start_date_sensitivity.csv")
 
+    # the one the audit cannot settle: is the momentum factor premium real going
+    # forward? keep its risk, vary how much of its payment you credit
+    haircuts = []
+    for haircut in (0.0, 0.25, 0.5, 0.75, 1.0):
+        frame, _ = data.extend_with_factors(
+            "SPMO", include_alpha=False, momentum_premium_haircut=haircut
+        )
+        row = evaluate(
+            frame["ret"].to_numpy(), f"momentum premium haircut {haircut:.0%}", args.paths
+        )
+        row["haircut"] = haircut
+        haircuts.append(row)
+    haircut_table = pd.DataFrame(haircuts).set_index("haircut")
+    haircut_table.to_csv(RESULTS / "momentum_premium_sensitivity.csv")
+
     # block length is a free parameter of the bootstrap; check it is not load-bearing
     blocks = []
     for block in (5, 10, 21, 42, 63):
@@ -174,6 +205,8 @@ def main() -> None:
     print(audit[cols].round(3).to_string())
     print("\n=== does the answer depend on including the Great Depression? ===")
     print(sensitivity[cols].round(3).to_string())
+    print("\n=== is the momentum factor premium real? (risk kept, payment varied) ===")
+    print(haircut_table[cols].round(3).to_string())
     print("\n=== bootstrap block length (a free parameter) ===")
     print(block_table.round(4).to_string())
     print(f"\nSPMO on market + momentum: {factor_fit}")

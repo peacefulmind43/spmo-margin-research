@@ -8,6 +8,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .margin import TRADING_DAYS_PER_YEAR
+
 CACHE_DIR = Path(__file__).resolve().parents[1] / "data"
 FRED_DFF = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFF"
 
@@ -162,6 +164,8 @@ def extend_with_factors(
     ticker: str = "SPMO",
     include_alpha: bool = False,
     include_residual: bool = True,
+    residual_block: int = 21,
+    momentum_premium_haircut: float = 0.0,
     refresh: bool = False,
     seed: int = 20260910,
 ) -> tuple[pd.DataFrame, dict[str, float]]:
@@ -174,33 +178,71 @@ def extend_with_factors(
     ``include_residual`` resamples the regression residuals so the synthetic series
     keeps the ETF's idiosyncratic volatility instead of being a smooth factor
     combination. Without it the tails are understated.
+
+    The residuals are drawn in ``residual_block``-day blocks rather than one day at a
+    time. They are not iid: the autocorrelation of their absolute value is 0.29 at
+    lag 1 and still 0.21 at lag 5, their kurtosis is 11, and 21-day rolling
+    idiosyncratic vol ranges from 2% to 28% annualised. Sampling them independently
+    would smooth all of that away and make a clustered idiosyncratic drawdown look
+    far less likely than it is.
     """
+    # reuses the bootstrap module's block sampler rather than reimplementing it; the
+    # dependency runs data -> bootstrap only, so there is no import cycle
+    from .bootstrap import moving_block_paths
+
     resid, stats = fit_factor_model(ticker, refresh=refresh)
     factors = load_french_factors(refresh=refresh)
 
+    # Zeroing the ETF's own alpha still leaves the momentum factor premium in, worth
+    # about 2.1%/yr here at a 0.32 loading. That premium has a century of evidence
+    # behind it, far more than any single fund's record -- but momentum is also the
+    # most heavily published anomaly there is, and published anomalies decay. The
+    # haircut removes a fraction of the premium while keeping momentum's volatility
+    # and crash risk, which is the pessimistic case worth pricing: you carry the
+    # factor's downside without being paid for it.
+    momentum = factors["mom"] - momentum_premium_haircut * factors["mom"].mean()
+
     synthetic = (
         stats["beta_market"] * factors["mkt_rf"]
-        + stats["beta_momentum"] * factors["mom"]
+        + stats["beta_momentum"] * momentum
         + factors["rf"]
     )
     if include_alpha:
         synthetic = synthetic + stats["alpha_daily"]
-    if include_residual:
-        rng = np.random.default_rng(seed)
-        draws = rng.choice(resid.to_numpy(), size=len(synthetic), replace=True)
-        synthetic = synthetic + draws
-
     live = load_total_return(ticker, refresh=refresh).pct_change().dropna()
+    overlap = synthetic.index.intersection(live.index)
+    synthetic_only = synthetic.index.difference(overlap)
+
+    if include_residual:
+        draws = moving_block_paths(
+            resid.to_numpy(),
+            n_paths=1,
+            horizon=len(synthetic_only),
+            block=residual_block,
+            seed=seed,
+        )[0]
+        # OLS residuals are mean-zero by construction, but any single resampled draw
+        # is not: its sample mean is noise worth roughly 1%/yr at this length. Left
+        # in, that noise lands straight in the drift estimate and so in Kelly, which
+        # is drift/variance -- an earlier version of this code shifted mu by 2.3%/yr
+        # on the luck of one draw. Residuals are here to supply idiosyncratic
+        # variance, not drift, so the draw is demeaned. It is demeaned over exactly
+        # the days it is used on, since the live period below overwrites the rest.
+        synthetic.loc[synthetic_only] += draws - draws.mean()
+
     combined = synthetic.copy()
-    combined.loc[combined.index.intersection(live.index)] = live.reindex(
-        combined.index.intersection(live.index)
-    )
+    combined.loc[overlap] = live.reindex(overlap)
 
     frame = pd.DataFrame({"ret": combined.sort_index()})
     benchmark = load_benchmark_rate(refresh=refresh)
     frame["bm"] = benchmark.reindex(frame.index).ffill()
-    # before the Fed Funds series begins, fall back to the contemporaneous T-bill
-    frame["bm"] = frame["bm"].fillna(factors["rf"].reindex(frame.index) * 360)
+    # Fed Funds only starts in July 1954; before that fall back to the contemporaneous
+    # T-bill. French's rf is a daily rate over *trading* days that compounds to the
+    # monthly bill rate, so it annualises by 252, not by the 360-day interest basis.
+    # (Checked against known levels: 2024 gives 5.0%, 1981 gives 13.6%.)
+    frame["bm"] = frame["bm"].fillna(
+        factors["rf"].reindex(frame.index) * TRADING_DAYS_PER_YEAR
+    )
     frame["bm"] = frame["bm"].clip(lower=0.0).bfill()
     frame["is_synthetic"] = ~frame.index.isin(live.index)
     return frame, stats
