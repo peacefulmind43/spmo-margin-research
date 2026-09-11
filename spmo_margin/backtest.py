@@ -48,14 +48,16 @@ class Account:
     # commission plus half-spread on the notional traded. Without this a rebalance
     # is free and the optimal no-trade band is trivially zero.
     rebalance_cost: float = 0.0002
+    # broker-entity spread added to every tier; see margin.IBAU_SURCHARGE_NON_AUD
+    surcharge: float = 0.0
 
     def borrow_rate(self, loan: float, benchmark: float) -> float:
         if self.benchmark_override is not None:
             benchmark = self.benchmark_override
         if self.spread_override is not None:
-            rate = max(benchmark + self.spread_override, 0.0)
+            rate = max(benchmark + self.spread_override + self.surcharge, 0.0)
         else:
-            rate = blended_margin_rate(loan, benchmark, self.tiers)
+            rate = blended_margin_rate(loan, benchmark, self.tiers, self.surcharge)
         # Deducting margin interest against other taxable income lowers its true
         # cost. Modelled as a reduced effective rate, which assumes the deduction is
         # usable in the year it accrues -- optimistic if investment income is the

@@ -388,3 +388,38 @@ def test_forward_vol_rescaling_preserves_the_mean():
     assert scaled.mean() == pytest.approx(centre, rel=1e-12)
     assert scaled.std() * np.sqrt(252) == pytest.approx(target, rel=1e-12)
     assert scaled.std() > series.std()
+
+
+def test_ibau_surcharge_applies_to_every_tier():
+    """IBKR Australia's spread is added to all tiers, not just the first."""
+    from spmo_margin.margin import IBAU_SURCHARGE_NON_AUD, blended_margin_rate
+
+    bm = 0.0363
+    for loan in (25_000, 250_000, 5_000_000):
+        plain = blended_margin_rate(loan, bm)
+        loaded = blended_margin_rate(loan, bm, surcharge=IBAU_SURCHARGE_NON_AUD)
+        assert loaded == pytest.approx(plain + IBAU_SURCHARGE_NON_AUD)
+
+    # first USD tier goes from 5.13% to 7.13% at today's benchmark
+    assert blended_margin_rate(50_000, bm, surcharge=IBAU_SURCHARGE_NON_AUD) == pytest.approx(0.0713)
+
+
+@pytest.mark.parametrize("leverage", [1.0, 1.5, 2.0])
+def test_surcharge_matches_across_simulators(leverage):
+    from spmo_margin.margin import IBAU_SURCHARGE_NON_AUD
+
+    rng = np.random.default_rng(17)
+    rets = rng.normal(0.0003, 0.013, 900)
+    bm = 0.0363
+    scalar = simulate(
+        rets,
+        np.full(len(rets), bm),
+        Account(leverage=leverage, surcharge=IBAU_SURCHARGE_NON_AUD),
+    )
+    vector = simulate_paths(
+        rets[None, :], leverage, bm, surcharge=IBAU_SURCHARGE_NON_AUD
+    )
+    assert vector["cagr"][0] == pytest.approx(scalar["stats"]["cagr"], rel=1e-9)
+    if leverage > 1.0:
+        plain = simulate(rets, np.full(len(rets), bm), Account(leverage=leverage))
+        assert scalar["stats"]["interest_paid"] > plain["stats"]["interest_paid"]

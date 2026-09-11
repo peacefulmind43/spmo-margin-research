@@ -28,6 +28,16 @@ IBKR_PRO_USD_TIERS: list[tuple[float, float]] = [
 IBKR_LITE_USD_TIERS: list[tuple[float, float]] = [(np.inf, 0.0250)]
 
 MARGIN_RATE_FLOOR = 0.0075  # IBKR charges at least 0.75% on a margin loan
+
+# IBKR Australia adds a spread on top of the standard schedule, applied to *every*
+# tier, for all retail clients and for non-retail natural-person clients holding a
+# Standard Margin Lending Facility. It is 1% on AUD borrowing and 2% on everything
+# else -- so a USD loan against a US ETF, booked through the Australian entity, is
+# 2% more expensive than the headline schedule suggests. This is the single largest
+# financing assumption in the repo and it depends on the account's entity and
+# classification, not on the asset.
+IBAU_SURCHARGE_AUD = 0.0100
+IBAU_SURCHARGE_NON_AUD = 0.0200
 CREDIT_SPREAD = -0.0050     # idle cash earns roughly benchmark - 0.5%
 CREDIT_THRESHOLD = 10_000.0  # no interest paid on the first $10k of cash
 DAY_COUNT = 360             # IBKR accrues financing on a 360-day year
@@ -46,6 +56,7 @@ def blended_margin_rate(
     loan: float,
     benchmark: float,
     tiers: list[tuple[float, float]] = IBKR_PRO_USD_TIERS,
+    surcharge: float = 0.0,
 ) -> float:
     """Annualised rate on a margin loan of ``loan`` dollars.
 
@@ -60,7 +71,7 @@ def blended_margin_rate(
         amount = min(loan, upper) - lower
         if amount <= 0:
             break
-        cost += amount * max(benchmark + spread, MARGIN_RATE_FLOOR)
+        cost += amount * max(benchmark + spread + surcharge, MARGIN_RATE_FLOOR)
         lower = upper
     return cost / loan
 
@@ -76,6 +87,7 @@ def credit_rate(cash: float, benchmark: float) -> float:
 def rate_table(
     benchmark: float,
     loans: tuple[float, ...] = (25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000),
+    surcharge: float = 0.0,
 ) -> list[tuple[float, float]]:
     """Blended rate at a few representative loan sizes, for reporting."""
-    return [(loan, blended_margin_rate(loan, benchmark)) for loan in loans]
+    return [(loan, blended_margin_rate(loan, benchmark, surcharge=surcharge)) for loan in loans]

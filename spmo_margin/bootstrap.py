@@ -51,6 +51,7 @@ def _blended_rate_vec(
     loan: np.ndarray,
     benchmark: float,
     tiers: list[tuple[float, float]],
+    surcharge: float = 0.0,
 ) -> np.ndarray:
     """Vectorised tiered margin rate for an array of loan balances."""
     loan = np.maximum(loan, 0.0)
@@ -58,7 +59,7 @@ def _blended_rate_vec(
     lower = 0.0
     for upper, spread in tiers:
         amount = np.clip(np.minimum(loan, upper) - lower, 0.0, None)
-        cost += amount * np.maximum(benchmark + spread, MARGIN_RATE_FLOOR)
+        cost += amount * np.maximum(benchmark + spread + surcharge, MARGIN_RATE_FLOOR)
         lower = upper
     return np.divide(cost, loan, out=np.zeros_like(loan), where=loan > 0)
 
@@ -86,6 +87,7 @@ def simulate_paths(
     intraday_dip: float = 0.0,
     rebalance_cost: float = 0.0002,
     band: float = 0.25,  # must match Account.band, or the twins disagree
+    surcharge: float = 0.0,
 ) -> dict[str, np.ndarray]:
     """Step many return paths through the margin account simultaneously.
 
@@ -125,7 +127,7 @@ def simulate_paths(
         # 1. financing accrues on yesterday's debit balance
         borrowing = alive & (debit > 0)
         if borrowing.any():
-            rate = _blended_rate_vec(debit[borrowing], bm[borrowing] if bm.ndim else bm, tiers)
+            rate = _blended_rate_vec(debit[borrowing], bm[borrowing] if bm.ndim else bm, tiers, surcharge)
             accrual = debit[borrowing] * rate * (1.0 - interest_tax_shield) / ACCRUAL_DIVISOR
             debit[borrowing] += accrual
             interest_paid[borrowing] += accrual
