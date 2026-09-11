@@ -1,0 +1,44 @@
+
+10y terminal equity, $100,000 start, 128 paths
+
+                               1.00    1.25    1.50    1.75    2.00    2.50    3.00
+statistic contribution_rate
+median    0.0                 303.0   333.0   360.0   383.0   398.0   375.0   312.0
+p05       0.0                 134.0   122.0   110.0    97.0    84.0    53.0    24.0
+median    0.2                 684.0   747.0   804.0   850.0   889.0   912.0   827.0
+p05       0.2                 338.0   308.0   279.0   249.0   221.0   164.0   105.0
+median    0.5                1242.0  1350.0  1448.0  1536.0  1612.0  1670.0  1565.0
+p05       0.5                 648.0   592.0   536.0   481.0   426.0   314.0   211.0
+median    0.8                1797.0  1956.0  2110.0  2235.0  2343.0  2429.0  2286.0
+p05       0.8                 950.0   867.0   785.0   701.0   622.0   461.0   318.0
+
+--- shape, indexed to each row's own unlevered outcome ---
+                             1.00   1.25   1.50   1.75   2.00   2.50   3.00
+statistic contribution_rate
+median    0.0                 1.0  1.100  1.191  1.266  1.315  1.239  1.030
+p05       0.0                 1.0  0.911  0.817  0.723  0.628  0.391  0.179
+median    0.2                 1.0  1.092  1.176  1.243  1.300  1.333  1.209
+p05       0.2                 1.0  0.912  0.824  0.738  0.653  0.486  0.309
+median    0.5                 1.0  1.087  1.166  1.237  1.298  1.344  1.260
+p05       0.5                 1.0  0.913  0.827  0.742  0.658  0.485  0.326
+median    0.8                 1.0  1.088  1.174  1.244  1.303  1.351  1.272
+p05       0.8                 1.0  0.913  0.826  0.738  0.654  0.485  0.335
+
+--- target leverage vs no new borrowing (interest still capitalises) ---
+                               strategy  initial_leverage  cagr_p05  cagr_median  median_max_drawdown  prob_dd_over_50  p05_worst_vs_contributed  median_margin_calls  median_mean_leverage  median_final_leverage
+                      constant leverage              1.00     0.030        0.117               -0.340            0.094                     0.704                  0.0                 1.000                  1.000
+                      constant leverage              1.25     0.021        0.128               -0.429            0.219                     0.623                  0.0                 1.250                  1.247
+                      constant leverage              1.50     0.010        0.138               -0.508            0.539                     0.522                  0.0                 1.499                  1.494
+                      constant leverage              1.75    -0.001        0.145               -0.580            0.734                     0.429                  0.0                 1.749                  1.739
+                      constant leverage              2.00    -0.015        0.150               -0.640            0.867                     0.360                  0.0                 2.000                  1.983
+                      constant leverage              2.50    -0.059        0.144               -0.749            0.977                     0.229                  0.0                 2.500                  2.469
+                      constant leverage              3.00    -0.128        0.124               -0.836            1.000                     0.136                 12.0                 2.998                  2.950
+no new borrowing (interest capitalised)              1.00     0.030        0.117               -0.340            0.094                     0.704                  0.0                 1.000                  1.000
+no new borrowing (interest capitalised)              1.25     0.029        0.122               -0.368            0.117                     0.653                  0.0                 1.080                  1.033
+no new borrowing (interest capitalised)              1.50     0.026        0.128               -0.392            0.180                     0.597                  0.0                 1.158                  1.064
+no new borrowing (interest capitalised)              1.75     0.026        0.133               -0.418            0.266                     0.534                  0.0                 1.233                  1.094
+no new borrowing (interest capitalised)              2.00     0.024        0.139               -0.444            0.320                     0.470                  0.0                 1.305                  1.120
+no new borrowing (interest capitalised)              2.50     0.005        0.147               -0.505            0.508                     0.348                  0.0                 1.438                  1.166
+no new borrowing (interest capitalised)              3.00    -0.016        0.151               -0.541            0.562                     0.285                  0.0                 1.558                  1.206
+
+wrote ['../smoke/funding/figures/leverage_vs_saving_light.png', '../smoke/funding/figures/leverage_vs_saving_dark.png']

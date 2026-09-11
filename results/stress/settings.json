@@ -1,0 +1,15 @@
+{
+  "paths": 512,
+  "years": 10,
+  "equity": 50000.0,
+  "benchmark": 0.0363,
+  "monthly_contribution": 0.0,
+  "output": "results/stress",
+  "seed": 907,
+  "annual_drag": 0.003,
+  "band": 0.1,
+  "max_leverage": 2.0,
+  "status": "sensitivity_only",
+  "live_sizing_approved": false,
+  "assumptions": "Factor reconstruction; stress sizes are not calibrated probabilities. Equal-mean paired rates are rescaled historical blocks, not a policy forecast."
+}

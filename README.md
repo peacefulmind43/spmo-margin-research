@@ -13,6 +13,13 @@ The [first adversarial audit](audits/2026-09-11/adversarial-review.md) documents
 earlier bugs and unresolved data problems; its personal sizing judgment is not
 an empirically validated optimum either.
 
+Read the [new live-use review and failing cases](docs/live-use-review.md) with the
+[execution record](results/review/execution.json). In the stated log-growth stress
+run, a 2pp reduction in expected annual asset return moves the best tested leverage
+from 2x to 1.5x; 4pp moves it to 1x. These are sensitivities, not estimated bias.
+In the 2019–2026 actual ETF slice, fixed 2x beats annual fitted selection on all five
+surviving funds. Neither result supplies a selection-adjusted live recommendation.
+
 ## Changes for live-use review
 
 - Training truncates raw ETF prices, factors and financing at an explicit `as_of`
@@ -128,7 +135,8 @@ effects or interest deductibility. `interest_tax_shield=0` is the default.
    reconstruction. The S&P 500 Momentum Index is a closer methodological proxy,
    but its pre-launch history is backtested and a validated daily total-return
    series is still missing here. Two reconstructions agreeing is not independent
-   confirmation.
+   confirmation. Annual refits do not propagate a calibrated process for future
+   factor loadings or uncertainty about expected return inside each forecast.
 3. **Untouched observations and household cashflows.** These dates have already
    been inspected. Causally refitted walk-forward diagnostics cannot turn them into
    pristine prospective evidence. Current data vintages can include revisions;

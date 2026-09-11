@@ -1,0 +1,18 @@
+
+Equity $50,000   benchmark 3.63%   maintenance 50%
+
+   lev     position        loan     rate    interest/yr   as % equity   margin call at   wiped out at   opening
+  ------------------------------------------------------------------------------------------------
+  1.500x  $   75,000  $   25,000   5.13%   $    1,335       2.67%           -33.3%         -66.7%   feasible*
+
+'margin call at' is the price decline that breaches the maintenance
+requirement; 'wiped out at' is the decline that takes equity to zero.
+Both assume a close-to-close move with no intraday gap and no rebalancing
+on the way down -- a real liquidation is worse on all three counts.
+* Feasible only under the supplied limits, not a broker approval or recommendation.
+
+No-trade band at 5% relative: rebalance only when leverage leaves
+  [1.425x, 1.575x]
+  upper bound 1.575x is reached after a cumulative move of -8.7%
+  lower bound 1.425x is reached after a cumulative move of +11.8%
+These algebraic crossings exclude interest, costs, cashflows and changing requirements.

@@ -1,0 +1,79 @@
+{
+  "source_commit": "30b0c1c0eb72aeb632b4fd38c0535ea5ecbd1018",
+  "test_count": 233,
+  "simulator_tolerance": "1e-9 (unchanged)",
+  "environment": {
+    "MPLCONFIGDIR": "../mpl",
+    "python": "3.14.3"
+  },
+  "note": "Exit codes observed from completed shell sessions. Logs normalize local workspace prefixes and remove trailing whitespace. Old research script runs use reduced paths for regression checks, not estimator convergence.",
+  "installation": "pip install -e \".[dev]\"",
+  "runs": [
+    {
+      "name": "pytest",
+      "command": "python -m pytest -q",
+      "exit_code": 0,
+      "log": "live-pytest.log",
+      "log_sha256": "d983f4af617c614bb6b211c9137d080aff80b43faa8a7fda0747d5328b8db889"
+    },
+    {
+      "name": "validation",
+      "command": "python scripts/validate_live.py",
+      "exit_code": 0,
+      "log": "live-validation.log",
+      "log_sha256": "c2de2e44ad259e4831ff58432f0714cef5a65aeb9d34ea8720b57ac9f1e823cc"
+    },
+    {
+      "name": "stress",
+      "command": "python scripts/stress_account.py --output results/stress",
+      "exit_code": 0,
+      "log": "live-stress.log",
+      "log_sha256": "dbf84f0c2726abab4891ac707bf3ac24658bd31f614829e199c656ce654a585f"
+    },
+    {
+      "name": "run_analysis",
+      "command": "SPMO_RESULTS_DIR=../smoke/run_analysis python scripts/run_analysis.py --paths 128",
+      "exit_code": 0,
+      "log": "smoke-run_analysis.log",
+      "log_sha256": "a3292bed56009c86124f758e0928a810ff190c9f7fcc907719de2ce938707adf"
+    },
+    {
+      "name": "overfitting",
+      "command": "SPMO_RESULTS_DIR=../smoke/overfitting python scripts/overfitting_audit.py --paths 128",
+      "exit_code": 0,
+      "log": "smoke-overfitting.log",
+      "log_sha256": "c71b6b904e186fc4ec4892ee0ad3d83c7c7b1a9e5cb4bf6b5777a63113933e88"
+    },
+    {
+      "name": "funding",
+      "command": "SPMO_RESULTS_DIR=../smoke/funding python scripts/funding_strategies.py --paths 128",
+      "exit_code": 0,
+      "log": "smoke-funding.log",
+      "log_sha256": "f4674a6164ed0bedc9de511fd27845c669f4b5332e4e3b217f3a10acf9fdf1e7"
+    },
+    {
+      "name": "optimise",
+      "command": "SPMO_RESULTS_DIR=../smoke/optimise python scripts/optimise_target.py --paths 128 --horizon 10 --gamma 1",
+      "exit_code": 0,
+      "log": "smoke-optimise.log",
+      "log_sha256": "3e907eb82ec6ef4cea7447f039daee770461cac3dc19e83a7e8a7f9979277682"
+    },
+    {
+      "name": "calculator",
+      "command": "python scripts/position_calculator.py --equity 50000 --leverage 1.5 --maintenance .50",
+      "exit_code": 0,
+      "log": "smoke-calculator.log",
+      "log_sha256": "5c600fea9928545e8e24c3ba498e528cae05a406952c67187bbc386f01f29229"
+    }
+  ],
+  "result_sha256": {
+    "results/validation/equity_curves.csv": "5aa6ada13c8f1fe385eb59a4ed23927b8d9121d33a0c0075ff64cf1956a5053f",
+    "results/validation/folds.csv": "7df710a151c1d2ee00ae2582231019cfdeca5b5e4bb0a00f9b9d5260be33faf5",
+    "results/validation/manifest.json": "0c9499dfffac2172f3142971fe13dd9c7717621166cd8b3ebcd7d30e6d6f1a0b",
+    "results/validation/skipped_folds.csv": "1c25bca67def375f94dc97b2500edd50cf38cf8e9a8f04e2f8b2359a5e92c451",
+    "results/validation/summary.csv": "d18416ae2282bdd40124b15cba9288b7e0201eb97a3683d4d9146ff2b7e19724",
+    "results/validation/training_scores.csv": "00e3105dc77649d2694dd9b3489dc10fd3fb9e6085e9a1d46bc896ea09f13ffc",
+    "results/stress/scenarios.csv": "0b3f22e0a6e856799e250a73b20bf71b362802955c8bf0cfe64f5a12642b8e45",
+    "results/stress/settings.json": "856ce77e640e2f1bfc313c635bdabedf220da35db98eb4af4a3995ccdbbb59eb"
+  }
+}
