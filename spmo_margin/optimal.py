@@ -87,6 +87,24 @@ def half_kelly(f_star: float) -> float:
     return f_star / 2.0
 
 
+def constrained_growth_optimal(table: pd.DataFrame, threshold: float) -> float:
+    """Maximise piecewise-linear median growth over the feasible leverage set.
+
+    Include boundary crossings, rather than assuming growth increases until the
+    drawdown budget binds. Ties choose the smaller exposure.
+    """
+    table = table.sort_index()
+    x = table.index.to_numpy(float)
+    g = table["median_cagr"].to_numpy(float)
+    d = table["prob_deep_drawdown"].to_numpy(float)
+    candidates = [(x[i], g[i]) for i in range(len(x)) if d[i] <= threshold]
+    for i in range(len(x) - 1):
+        if (d[i] - threshold) * (d[i + 1] - threshold) < 0:
+            w = (threshold - d[i]) / (d[i + 1] - d[i])
+            candidates.append((x[i] + w * (x[i + 1] - x[i]), g[i] + w * (g[i + 1] - g[i])))
+    return float(max(candidates, key=lambda p: (p[1], -p[0]))[0]) if candidates else float("nan")
+
+
 def summarise_answers(
     bootstrap_table: pd.DataFrame,
     kelly_estimates: dict[str, float],

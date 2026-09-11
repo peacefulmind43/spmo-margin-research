@@ -93,6 +93,8 @@ def summarise(
     rets = np.zeros(len(equity) - 1)
     valid = alive[:-1] & alive[1:]
     rets[valid] = (equity[1:][valid] - contributions[valid]) / equity[:-1][valid] - 1.0
+    # Losing all opening equity is a -100% return, not a missing observation.
+    rets[alive[:-1] & ~alive[1:]] = -1.0
     rets = np.clip(rets, -1.0, None)
 
     growth = float(np.prod(1.0 + rets))

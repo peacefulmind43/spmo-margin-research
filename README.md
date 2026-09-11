@@ -1,5 +1,15 @@
 # How much margin is optimal for SPMO?
 
+> **Adversarial review — 11 September 2026:** The review found material issues with
+> the leverage recommendation and several implementation defects. Read the
+> [review and quantified failing cases](audits/2026-09-11/adversarial-review.md)
+> before using the historical conclusions below to size a position. This update
+> fixes wipeout performance metrics and constrained-growth optimisation, adds
+> time-varying financing paths, and retains scalar/vector agreement at 1e-9 across
+> 175 passing tests. Broker-specific maintenance enforcement, validated closed-fund
+> histories, and a complete daily S&P index reconstruction remain unresolved.
+> [Evidence and reproduction instructions](audits/2026-09-11/README.md).
+
 [SPMO](https://www.invesco.com/us/financial-products/etfs/product-detail?audienceType=Investor&ticker=SPMO)
 is the Invesco S&P 500 Momentum ETF. It has returned about 19% a year since launch
 with a worst drawdown of only 31%, which makes borrowing against it look extremely
