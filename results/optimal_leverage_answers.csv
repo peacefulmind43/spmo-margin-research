@@ -1,5 +1,5 @@
 criterion,leverage,basis
-growth-optimal (median CAGR),2.2045275115999776,maximises median 10y CAGR across bootstrap paths
+growth-optimal (median CAGR),2.1985661504672396,maximises median 10y CAGR across bootstrap paths
 robust-optimal (5th pct CAGR),1.0,maximises the 5th percentile of 10y CAGR
 robust-optimal (25th pct CAGR),1.0,maximises the 25th percentile of 10y CAGR
 full Kelly (SPMO 2015-2026 (live only)),3.292378630372425,growth-optimal under that sample's drift estimate
@@ -9,5 +9,5 @@ half Kelly (SPMO 2015-2026 (live only)),1.6461893151862126,haircut for drift-est
 "full Kelly (1926-2026, alpha zeroed)",2.150428529553658,growth-optimal under that sample's drift estimate
 "half Kelly (1926-2026, alpha zeroed)",1.075214264776829,haircut for drift-estimation error
 drawdown budget -25% (median),,largest leverage with median max drawdown inside -25%
-drawdown budget -35% (median),1.0361744944541968,largest leverage with median max drawdown inside -35%
-drawdown budget -50% (median),1.5082217742187642,largest leverage with median max drawdown inside -50%
+drawdown budget -35% (median),1.0361505814380887,largest leverage with median max drawdown inside -35%
+drawdown budget -50% (median),1.508126703213782,largest leverage with median max drawdown inside -50%

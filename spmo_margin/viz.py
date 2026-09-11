@@ -408,6 +408,46 @@ def plot_leverage_vs_saving(
     return _both_modes(build, out)
 
 
+def plot_horizon_effect(table: pd.DataFrame, out: Path) -> list[Path]:
+    """5th-percentile CAGR against leverage, one line per holding period.
+
+    The argmax sits at 1.0x at every horizon, so the curves never turn upward. What
+    changes is the *level*: a bad decade at 1.5x loses money, while a bad forty years
+    at 1.5x still compounds at over 5%. Horizon does not move where the optimum is,
+    it moves how much being past it costs.
+    """
+    horizons = sorted(table.index.get_level_values("horizon_years").unique())
+    levels = sorted(table.columns)
+
+    def build(c):
+        fig, ax = plt.subplots(figsize=(7.4, 5.1))
+        ramp = c["ramp"]
+        entries = []
+        for i, years in enumerate(horizons):
+            row = table.loc[("cagr_p05", years)]
+            color = ramp[min(i, len(ramp) - 1)]
+            ax.plot(levels, [row[l] for l in levels], color=color, lw=2.0)
+            entries.append((row[levels[-1]], f"{years:g} years", color))
+
+        ax.axhline(0, color=c["axis"], lw=1)
+        ax.set_xlabel("Target leverage")
+        ax.set_ylabel("5th percentile of annualised return")
+        ax.yaxis.set_major_formatter(PCT)
+        _titled(
+            ax,
+            "A long horizon does not move the optimum, it lowers the price of missing it",
+            "every curve still peaks at 1.0x - but a bad outcome at 1.5x goes from losing money to +5%/yr",
+            c,
+        )
+        ax.set_xlim(levels[0], levels[-1] + 0.42)
+        ax.set_axisbelow(True)
+        _label_series_ends(ax, levels[-1], entries)
+        fig.tight_layout()
+        return fig
+
+    return _both_modes(build, out)
+
+
 def plot_kelly_curves(
     grids: dict[str, tuple[np.ndarray, np.ndarray]],
     out: Path,

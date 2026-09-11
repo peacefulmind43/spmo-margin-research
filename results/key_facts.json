@@ -51,27 +51,35 @@
       "blended_annual_rate": 0.0468
     }
   ],
-  "growth_optimal": 2.2045275115999776,
+  "growth_optimal": 2.1985661504672396,
   "robust_optimal_p05": 1.0,
   "robust_optimal_p25": 1.0,
   "drawdown_budgets": {
     "-25%": NaN,
     "-30%": NaN,
-    "-35%": 1.0361744944541968,
-    "-40%": 1.1880174398980747,
-    "-50%": 1.5082217742187642
+    "-35%": 1.0361505814380887,
+    "-40%": 1.1878931516630433,
+    "-50%": 1.508126703213782
   },
   "robust_optimal_high_rates": 1.0,
   "p05_optimal_range_across_seeds": [
     1.0,
     1.0
   ],
+  "horizon_p05_optimal": {
+    "10": 1.0,
+    "20": 1.0,
+    "30": 1.0,
+    "40": 1.0
+  },
   "figures": [
     "results/figures/growth_vs_downside_light.png",
     "results/figures/growth_vs_downside_dark.png",
     "results/figures/equity_curves_light.png",
     "results/figures/equity_curves_dark.png",
     "results/figures/kelly_growth_light.png",
-    "results/figures/kelly_growth_dark.png"
+    "results/figures/kelly_growth_dark.png",
+    "results/figures/horizon_effect_light.png",
+    "results/figures/horizon_effect_dark.png"
   ]
 }

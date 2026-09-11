@@ -203,6 +203,40 @@ def main() -> None:
         float(stability_table["p05_optimal_leverage"].max()),
     ]
 
+    # ------------------------------------------------------------- horizon
+    # Ten years was the wrong default for anyone young. The optimum does not move
+    # with horizon, but the cost of sitting above it collapses: at 1.5x a bad decade
+    # loses money while a bad forty years still compounds above 5%. Drawdown goes the
+    # other way -- more years means more chances to meet the worst one.
+    horizon_records: dict[tuple[str, float], dict[float, float]] = {}
+    for years in (10, 20, 30, 40):
+        paths = bootstrap.moving_block_paths(
+            extended["ret"].to_numpy(), args.paths, int(years * 252), seed=11
+        )
+        for lev in LEVERAGES:
+            out = bootstrap.simulate_paths(paths, lev, bm_now)
+            horizon_records.setdefault(("cagr_p05", years), {})[lev] = float(
+                np.percentile(out["cagr"], 5)
+            )
+            horizon_records.setdefault(("cagr_median", years), {})[lev] = float(
+                np.median(out["cagr"])
+            )
+            horizon_records.setdefault(("median_max_drawdown", years), {})[lev] = float(
+                np.median(out["max_drawdown"])
+            )
+            horizon_records.setdefault(("prob_dd_over_70", years), {})[lev] = float(
+                (out["max_drawdown"] < -0.70).mean()
+            )
+    horizon = pd.DataFrame(horizon_records).T
+    horizon.index.names = ["statistic", "horizon_years"]
+    horizon.to_csv(RESULTS / "horizon_sensitivity.csv")
+    facts["horizon_p05_optimal"] = {
+        str(years): optimal.robust_optimal(
+            pd.DataFrame({"cagr_p05": horizon.loc[("cagr_p05", years)]}), "cagr_p05"
+        )
+        for years in (10, 20, 30, 40)
+    }
+
     # -------------------------------------------------------------- figures
     figures = []
     figures += viz.plot_growth_and_downside(boot_ext, FIGURES / "growth_vs_downside.png")
@@ -212,6 +246,7 @@ def main() -> None:
         FIGURES / "equity_curves.png",
     )
     figures += viz.plot_kelly_curves(growth_grids, FIGURES / "kelly_growth.png")
+    figures += viz.plot_horizon_effect(horizon, FIGURES / "horizon_effect.png")
     facts["figures"] = [str(p.relative_to(ROOT)) for p in figures]
 
     (RESULTS / "key_facts.json").write_text(json.dumps(facts, indent=2, default=float))
@@ -241,6 +276,10 @@ def main() -> None:
     print(kelly_table[["mu_arith", "sigma", "kelly_gaussian", "kelly_empirical"]].round(3))
     print("\n--- what 'optimal' means ---")
     print(answers.round(2).to_string(index=False))
+    print("\n--- horizon: p05 CAGR by leverage ---")
+    print(horizon.loc["cagr_p05"].round(4).to_string())
+    print("\n--- horizon: P(drawdown worse than -70%) ---")
+    print(horizon.loc["prob_dd_over_70"].round(3).to_string())
     print("\n--- 5th-percentile peak, stability across bootstrap seeds ---")
     print(stability_table.round(4).to_string(index=False))
     print(f"\nwrote {len(list(RESULTS.rglob('*')))} files to {RESULTS.relative_to(ROOT)}/")

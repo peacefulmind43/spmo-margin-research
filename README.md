@@ -8,17 +8,63 @@ real tiered financing cost and a simulation that can margin-call you.
 
 ## The answer
 
-**1.0x, and 1.25x is the most any robustness cut supports.**
+**It depends on your holding period, and that turns out to matter more than
+anything else here.**
 
-The number this repo reports has moved twice, in both directions, as errors were
-found. That history is in [the audit](#the-overfitting-audit) — the most important
-section here, and the one to read before using any of this. What survived every pass
-is not a point estimate but a shape: **there is no leverage level at which the bad
-outcomes get better.**
+| Horizon | Answer |
+|---|---|
+| ~10 years | **1.0x–1.1x** |
+| **30–40 years** | **1.5x** |
+| any horizon | **stop by 2.0x** |
 
-On the honest build — real market and momentum factor returns back to 1926, the
-fund's own alpha set to zero, idiosyncratic risk restored, financing charged for
-calendar days:
+Earlier versions of this README reported a single number on a 10-year horizon. That
+was the wrong default for anyone young, and it was doing more work than all three
+overfitting biases combined. The optimum itself does not move with horizon — the
+5th-percentile argmax is 1.0x at 10, 20, 30 and 40 years alike — but **the price of
+sitting above the optimum collapses as the horizon lengthens**, because annualised
+dispersion shrinks with the square root of time while the median gain does not.
+
+At a 40-year horizon:
+
+| Leverage | 5th pct CAGR | median CAGR | median gain | 5th pct cost | ratio |
+|---|---|---|---|---|---|
+| 1.0x | +6.49% | 11.83% | — | — | — |
+| 1.25x | +6.17% | 12.98% | +1.15pp | −0.32pp | **3.6 : 1** |
+| **1.5x** | **+5.56%** | **13.95%** | **+2.12pp** | **−0.94pp** | **2.3 : 1** |
+| 1.75x | +4.68% | 14.63% | +2.81pp | −1.81pp | 1.6 : 1 |
+| 2.0x | +3.54% | 15.06% | +3.23pp | −2.95pp | 1.1 : 1 |
+| 2.25x | +1.80% | 15.04% | +3.21pp | −4.70pp | 0.7 : 1 |
+
+At ten years the same ratios are **below 1 : 1 everywhere** — 0.6 : 1 at 1.25x, 0.5 : 1
+at 1.5x — because a bad decade at 1.5x loses money (−2.32%/yr) while a bad forty
+years at 1.5x still compounds at +5.56%. Same data, same biases removed, opposite
+conclusion, entirely from the holding period.
+
+So on a multi-decade horizon the return distribution stops being the binding
+constraint. **The drawdown becomes the binding constraint**, and it moves the other
+way — more years means more chances to meet the worst one:
+
+| Leverage | median max drawdown (40y) | P(drawdown worse than −70%) |
+|---|---|---|
+| 1.0x | −47% | 2% |
+| 1.25x | −57% | 14% |
+| **1.5x** | **−66%** | **37%** |
+| 1.75x | −74% | 63% |
+| 2.0x | −81% | **84%** |
+
+That is why the answer stops at 1.5x rather than following the ratio up to 2.0x. At
+1.5x you are accepting roughly a one-in-three chance of watching the account fall
+70% at some point over forty years. At 2.0x it is five-in-six — effectively a
+certainty, and no return figure survives contact with an investor who sells there.
+
+What survived every pass of the audit is not a point estimate but a shape: **there is
+no leverage level at which the bad outcomes get better.** Leverage is always bought
+from the left tail. A long horizon makes the price cheap; it never makes it free.
+
+### The criteria, on the honest build
+
+Real market and momentum factor returns back to 1926, the fund's own alpha set to
+zero, idiosyncratic risk restored, financing charged for calendar days:
 
 | Criterion | Optimal leverage |
 |---|---|
@@ -46,65 +92,80 @@ The distribution, bootstrapped over 10-year horizons:
 | 2.0x | −6.2% | 15.0% | −63% | 83% |
 | 3.0x | −18.6% | 13.2% | −83% | 100% |
 
-Read it as a price list. Going from 1.0x to 1.25x buys 1.1 points of median CAGR and
-costs 1.6 points of 5th-percentile CAGR. Going to 1.5x buys 2.0 and costs 3.4. Going
-to 2.0x buys 3.0 and costs 7.9. The trade is never better than roughly fair, and it
-gets worse at every step. 1.25x is where it is least bad; 1.0x is where you stop
-paying for it at all.
+Those are the **10-year** figures, which is why the criteria table above reads so
+much more cautiously than the 40-year table at the top. On a decade, going from 1.0x
+to 1.5x buys 2.0 points of median CAGR and costs 3.4 points of 5th-percentile CAGR —
+a losing trade. On forty years the same move buys 2.1 and costs 0.9. Every criterion
+in the table above except full Kelly is a 10-year criterion, and none of them should
+be read as the answer for someone with decades left.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="results/figures/horizon_effect_dark.png">
+  <img alt="5th-percentile annualised return against leverage at 10, 20, 30 and 40 year horizons; every curve peaks at 1.0x but the penalty for exceeding it shrinks sharply with horizon" src="results/figures/horizon_effect_light.png">
+</picture>
 
 ### If you want one number
 
-Half Kelly on this build is **1.075x**, and that is as specific as the evidence
-allows. The digits after the first are noise: resampling 104 one-year blocks and
-re-optimising each time puts a 90% interval on full Kelly of **[1.14x, 3.11x]**, so
-half Kelly carries a standard error of about **±0.30**. Read it as "just under 1.1x",
-and treat anyone quoting three decimals — including this repo — with suspicion.
+**1.5x on a multi-decade horizon.** Three independent criteria land near it: the
+median-versus-5th-percentile trade is still 2.3 : 1 in your favour there and turns
+against you above about 2x; the drawdown crosses one-in-three at that point; and the
+growth-optimal answer is 2.15x, so 1.5x sits comfortably inside it.
 
-Stating it as relative risk aversion is more honest than calling it a convention.
-With `f* = (mu - r) / (gamma * sigma^2)`:
+The digits after the first are noise. Resampling 104 one-year blocks and
+re-optimising each time puts a 90% interval on full Kelly of **[1.14x, 3.11x]** — a
+century of data does not pin the optimum to within a factor of two, let alone three
+decimals. Treat anyone quoting three decimals, including this repo, with suspicion.
+
+Stating the choice as relative risk aversion is more honest than calling half Kelly
+a convention. With `f* = (mu - r) / (gamma * sigma^2)`:
 
 | Risk aversion | Leverage |
 |---|---|
 | gamma = 1 (log utility, full Kelly) | 2.150x |
-| gamma = 1.5 | 1.467x |
-| **gamma = 2 (half Kelly)** | **1.075x** |
+| **gamma = 1.5** | **1.467x** |
+| gamma = 2 (half Kelly) | 1.075x |
 | gamma = 3 | 0.734x |
 
-And a practical note that cuts against the whole exercise: at 1.075x on a $50k
-account the loan is $3,750, the interest is $200/yr, and the extra expected return is
-`0.075 × (12.95% − 5.13%) = 0.59%/yr` — about $293. That is a thin reward for
-carrying a margin loan, the record-keeping, and a worse left tail.
+For a long-horizon investor who is genuinely not risk averse, gamma between 1.5 and 2
+is the defensible range, which is 1.07x to 1.47x. The 40-year table above says the
+same thing from a different direction. **1.5x is where those two arguments meet.**
 
 ### The no-trade band
 
-Leverage moves as `L' = L(1+x) / (1 + Lx)` for a cumulative market move `x`, which
-means **a band is nearly moot at low leverage and urgent at high leverage**:
+Leverage moves as `L' = L(1+x) / (1 + Lx)` for a cumulative market move `x`, so how
+fast it drifts depends entirely on where you start:
 
-| Cumulative move | from 1.075x | from 1.25x | from 2.0x | from 3.0x |
+| Cumulative move | from 1.25x | from 1.5x | from 2.0x | from 3.0x |
 |---|---|---|---|---|
-| −10% | 1.084x | 1.286x | 2.250x | 3.857x |
-| −20% | 1.096x | 1.333x | 2.667x | 6.000x |
-| −30% | 1.111x | 1.400x | 3.500x | 21.000x |
-| −50% | 1.162x | 1.667x | wiped out | wiped out |
+| −10% | 1.286x | 1.588x | 2.250x | 3.857x |
+| −20% | 1.333x | 1.714x | 2.667x | 6.000x |
+| −30% | 1.400x | 1.909x | 3.500x | 21.000x |
+| −50% | 1.667x | 3.000x | wiped out | wiped out |
 
-At 1.075x a 20% fall moves leverage by 1.9%. At 3x it doubles it. So:
+**Target 1.5x, rebalance only when leverage leaves [1.275x, 1.725x]** — a ±15% band.
 
-**Target 1.075x, rebalance only when leverage leaves [1.021x, 1.129x].**
+Swept over 40-year horizons, that width is where the trade-off flattens out:
 
-- The upper bound is reached after a **−38.8%** cumulative decline. It is the bound
-  that does the work: it delevers you in a sustained bear market, which is the one
-  regime that actually threatens a levered account.
-- The lower bound needs a **+235%** run, so in practice it never binds. That means
-  leverage decays after gains and the loan is never topped up — deliberate, and it
-  is the cheap half of the asymmetry.
-- Sweeping band widths from 0% to 50%, the band triggers a median of **zero times
-  per decade** at anything above 5%, and the 5th-percentile CAGR varies by less than
-  0.1 points across the whole range. Rebalancing frequency is simply not a
-  load-bearing decision at this leverage — which is itself a reason to prefer it to
-  a leverage level where it would be.
+| Band | Range | Triggers after | Mean leverage held | 5th pct CAGR | median CAGR | trades / 40y |
+|---|---|---|---|---|---|---|
+| monthly | — | — | 1.499x | +5.54% | 13.87% | **480** |
+| ±5% | [1.425, 1.575] | −8.7% | 1.49x | +5.53% | 13.77% | 117 |
+| ±10% | [1.350, 1.650] | −15.4% | 1.467x | +5.56% | 13.73% | 31 |
+| **±15%** | **[1.275, 1.725]** | **−20.7%** | **1.435x** | **+5.61%** | **13.68%** | **13** |
+| ±30% | [1.050, 1.950] | −31.6% | 1.248x | +6.16% | 13.05% | 1 |
 
-`python scripts/position_calculator.py --equity 50000 --leverage 1.075` prints the
-position, the interest bill, the call distance and this band for any account size.
+A ±15% band matches monthly rebalancing on every metric while trading **13 times in
+forty years instead of 480**. Anything tighter is pure churn: a ±5% band fires after
+an 8.7% wobble.
+
+The wider bands look better on the 5th percentile, and it is the same trap as
+everywhere else in this repo — the ±30% band holds a mean leverage of 1.248x, not
+1.5x. It is not a better strategy, it is a lower one. Read the mean-leverage column
+before believing any row.
+
+`python scripts/position_calculator.py --equity 50000 --leverage 1.5 --band 0.15`
+prints the position, the interest bill, the call distance and this band for any
+account size.
 
 ## Why not more
 
@@ -494,8 +555,8 @@ pip install -e ".[dev]"
 python scripts/run_analysis.py          # the main study
 python scripts/overfitting_audit.py     # what each bias was worth -- read this one
 python scripts/funding_strategies.py    # contributions and funding strategy
-python scripts/position_calculator.py --equity 50000   # a concrete position
-pytest                                  # 89 tests
+python scripts/position_calculator.py --equity 50000 --leverage 1.5 --band 0.15
+pytest                                  # 115 tests
 ```
 
 Data comes from Yahoo Finance (SPMO, SPY total return), FRED (`DFF`, the Fed Funds
@@ -565,6 +626,10 @@ Honest limitations, roughly in order of how much they should worry you:
   every omission flatters the levered case.
 - **Financing is priced off today's tier schedule.** IBKR can change spreads without
   notice, and a levered position has no way to refuse.
+- **The horizon conclusion assumes you actually hold for decades.** The 40-year case
+  for 1.5x collapses back to the 10-year case if the money is needed early, and
+  "needed early" includes being scared out at the bottom. The drawdown table is
+  there because that is the failure mode, not an afterthought.
 
 ## Not investment advice
 
