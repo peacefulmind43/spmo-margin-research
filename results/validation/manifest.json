@@ -1,0 +1,83 @@
+{
+  "validation_state": "retrospective_diagnostic",
+  "live_sizing_approved": false,
+  "config": {
+    "tickers": [
+      "SPMO",
+      "MTUM",
+      "PDP",
+      "QMOM",
+      "MMTM"
+    ],
+    "grid": [
+      1.0,
+      1.25,
+      1.5,
+      1.75,
+      2.0
+    ],
+    "first_test_year": 2019,
+    "last_test_year": 2026,
+    "min_live_days": 756,
+    "paths": 128,
+    "forecast_years": 3,
+    "seed": 113,
+    "equity": 50000.0,
+    "annual_drag": 0.003,
+    "mean_revision": 0.02,
+    "maintenance": 0.25,
+    "stress_maintenance": 0.5,
+    "stress_drawdown": -0.2,
+    "monthly_withdrawal": 0.0,
+    "max_leverage": 2.0,
+    "financing": "asof_constant"
+  },
+  "data_sha256": {
+    "french_factors.csv": "18ba610a4cd0f795d7aa38b37ab493500720aa6e086913fdea91c02f7683e302",
+    "fed_funds.csv": "60567037c3e8e9f3f7890485725316b63cc9b80f14d0a3cea46d3ee079225bec",
+    "px_SPMO.csv": "8a911da71e56f4bf05e3ee886dd581e7e564772c98a83a1a6893079c27993450",
+    "px_MTUM.csv": "9c27db96809448013f7cd38b317c39bb9bcc0d70fd99d5139d90218021c004d0",
+    "px_PDP.csv": "8fa14ff4e3c5df6611eabf8539e9294f29a31cd0686d99929e0e27c1768b9eca",
+    "px_QMOM.csv": "d1080a1e6276221d13a117094012042cd67f04ba8a0b4aaa54e380f5393c345c",
+    "px_MMTM.csv": "69f1368a48acbefcd67c3dcccf14a6f75aca4a4e2d8efd6c8adab0b0ab360f97"
+  },
+  "source_commit": "30b0c1c0eb72aeb632b4fd38c0535ea5ecbd1018",
+  "source_sha256": {
+    "spmo_margin/__init__.py": "feb1009b6ec99d43c0236eb2202fa560bbb19e30211610451f47b71f1f6557a5",
+    "spmo_margin/backtest.py": "c03681bd75ce0bdef31b03288770cb0d731aa0b47c585f98dcaa1343f5622132",
+    "spmo_margin/bootstrap.py": "eadde43ee3d6879df123383327eca23bf0e41e3ac9b1a967148cfcc9e5aaf7e8",
+    "spmo_margin/data.py": "741de560c836884e0514a3f6cbf48214612eecc8a945944e79ca4218cb2e85e0",
+    "spmo_margin/inputs.py": "656e049b1676f238bfab0a9412e623463d67b6d4cd709eedcf7508c31922f811",
+    "spmo_margin/kelly.py": "eea8fbc4136005660dcfa98e382129a0854dd382f06372aa67bcea3f7c04e9cd",
+    "spmo_margin/margin.py": "0e7e0a0aa61c4daae420d2b28084b01daa489d72c430a7320b60c43f929de27b",
+    "spmo_margin/metrics.py": "6ddc6354d2711a779e56fe05f924bb4339b72e83de5b61b586ee43b0647c5f79",
+    "spmo_margin/optimal.py": "fc6fda1e989de8a9dd7b2ffa3cfbe95cbe6d2b0e9c6f5559206e559f3803697a",
+    "spmo_margin/validation.py": "7d515d0c9989adfe64f9f9392abef5b9fb68b2eebf0f8f100d1b742fdbc1f0ed",
+    "spmo_margin/viz.py": "923eee8e37106849c35345e0bd0cbf303cd3982ac691e7f0fe2d23f6c7e77d71",
+    "scripts/funding_strategies.py": "18f2c0ae77c42a65c860ba5ac17e7293b31518be46b45409db3406fd02fe54c4",
+    "scripts/optimise_target.py": "1d9a0694e639bcc75b2cb73f9d8250c0f618563b4c41346ddef517e407980489",
+    "scripts/overfitting_audit.py": "83771241d7605a0a3409e1b221c7cf2c3f355db6dbd3cf51acede038f5772887",
+    "scripts/position_calculator.py": "fdee644adcf8afe242a9aa5502061e7f2c7fc9fcebd35543965470afd54c8195",
+    "scripts/run_analysis.py": "6b078153919ee0c00c2974810ff53b150849510fa7a6eeea1d5f024397e128ed",
+    "scripts/stress_account.py": "10823bd3359728e0fee61a9649582a7386468a9df67a639d5d49d95f63018f6e",
+    "scripts/validate_live.py": "0480317f584fd5d8a26c65b97f201fabbb2c0c509dcc0f985aa26321c2bbac7d"
+  },
+  "python": "3.14.3",
+  "packages": {
+    "numpy": "2.5.3",
+    "pandas": "3.0.5",
+    "scipy": "1.18.1",
+    "yfinance": "1.7.0"
+  },
+  "limitations": [
+    "Universe chosen retrospectively; closed-fund total returns are not verified or included.",
+    "Historical dates have been inspected before; no untouched or prospective holdout is claimed.",
+    "Factor and adjusted-price caches are current vintages; observation-date cutoffs do not model publication delays or revisions.",
+    "The 2pp mean revision is a declared sensitivity, not an estimated selection-bias correction.",
+    "Historical DFF plus current Pro spreads is a funding proxy, not actual past IBKR contracts.",
+    "25%/50% maintenance stress is illustrative; actual instrument/account requirements are unverified.",
+    "30bp annual asset drag approximates withholding; no tax-residency determination or tax deduction.",
+    "Real household funding/withdrawal needs and their correlation with market stress remain unspecified.",
+    "Training uses a stated three-year default forecast; chronological results cover only the listed dates."
+  ]
+}

@@ -45,7 +45,8 @@ def load_total_return(ticker: str, refresh: bool = False) -> pd.Series:
 def load_benchmark_rate(refresh: bool = False) -> pd.Series:
     """Fed Funds Effective Rate as a decimal, forward-filled to every calendar day.
 
-    This is IBKR's USD benchmark. Using the daily history rather than today's level
+    This is a proxy for, not an exact history of, IBKR's USD reference benchmark.
+    Using the daily history rather than today's level
     matters: the 2015-2021 stretch of near-zero rates made leverage look far cheaper
     than it has been since 2022.
     """
@@ -222,7 +223,7 @@ def long_only_momentum_history(
 
 
 def fit_factor_model(
-    ticker: str = "SPMO", refresh: bool = False
+    ticker: str = "SPMO", refresh: bool = False, *, as_of: str | pd.Timestamp | None = None
 ) -> tuple[pd.Series, dict[str, float]]:
     """Regress the ETF's excess return on the market and momentum factors.
 
@@ -235,8 +236,16 @@ def fit_factor_model(
     price = load_total_return(ticker, refresh=refresh)
     factors = load_french_factors(refresh=refresh)
 
+    # Cut raw observations BEFORE fitting or estimating residuals. Cutting a
+    # synthetic series afterwards leaks later ETF exposures into earlier dates.
+    if as_of is not None:
+        price = price.loc[:as_of]
+        factors = factors.loc[:as_of]
+
     rets = price.pct_change().dropna()
     joined = pd.DataFrame({"ret": rets}).join(factors, how="inner").dropna()
+    if len(joined) <= 3:
+        raise ValueError("factor fit requires more than three overlapping observations")
     excess = (joined["ret"] - joined["rf"]).to_numpy()
 
     design = np.column_stack(
@@ -275,6 +284,7 @@ def extend_with_factors(
     momentum_premium_haircut: float = 0.0,
     refresh: bool = False,
     seed: int = 20260910,
+    as_of: str | pd.Timestamp | None = None,
 ) -> tuple[pd.DataFrame, dict[str, float]]:
     """Synthetic history built from real factor returns back to 1926.
 
@@ -297,8 +307,10 @@ def extend_with_factors(
     # dependency runs data -> bootstrap only, so there is no import cycle
     from .bootstrap import moving_block_paths
 
-    resid, stats = fit_factor_model(ticker, refresh=refresh)
+    resid, stats = fit_factor_model(ticker, refresh=refresh, as_of=as_of)
     factors = load_french_factors(refresh=refresh)
+    if as_of is not None:
+        factors = factors.loc[:as_of]
 
     # Zeroing the ETF's own alpha still leaves the momentum factor premium in, worth
     # about 2.1%/yr here at a 0.32 loading. That premium has a century of evidence
@@ -317,6 +329,8 @@ def extend_with_factors(
     if include_alpha:
         synthetic = synthetic + stats["alpha_daily"]
     live = load_total_return(ticker, refresh=refresh).pct_change().dropna()
+    if as_of is not None:
+        live = live.loc[:as_of]
     overlap = synthetic.index.intersection(live.index)
     synthetic_only = synthetic.index.difference(overlap)
 
@@ -342,7 +356,9 @@ def extend_with_factors(
 
     frame = pd.DataFrame({"ret": combined.sort_index()})
     benchmark = load_benchmark_rate(refresh=refresh)
-    frame["bm"] = benchmark.reindex(frame.index).ffill()
+    if as_of is not None:
+        benchmark = benchmark.loc[:as_of]
+    frame["bm"] = benchmark.reindex(frame.index, method="ffill")
     # Fed Funds only starts in July 1954; before that fall back to the contemporaneous
     # T-bill. French's rf is a daily rate over *trading* days that compounds to the
     # monthly bill rate, so it annualises by 252, not by the 360-day interest basis.

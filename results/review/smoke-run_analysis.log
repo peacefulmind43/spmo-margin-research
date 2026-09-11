@@ -1,0 +1,64 @@
+
+IBKR USD benchmark (Fed Funds): 3.63%
+SPMO on market+momentum: beta_mkt 0.969, beta_mom 0.315, alpha 3.33%/yr (t = 1.16), R2 0.789
+
+--- bootstrap, extended history ---
+          cagr_p05  cagr_median  cagr_p95  median_max_drawdown  prob_dd_over_50  prob_beat_unlevered
+leverage
+1.00         0.012        0.117     0.212               -0.321            0.078                0.000
+1.25        -0.004        0.128     0.249               -0.407            0.258                0.719
+1.50        -0.023        0.136     0.285               -0.486            0.438                0.695
+1.75        -0.045        0.143     0.321               -0.549            0.688                0.664
+2.00        -0.071        0.148     0.356               -0.614            0.797                0.633
+2.25        -0.098        0.153     0.390               -0.673            0.930                0.602
+2.50        -0.129        0.155     0.421               -0.728            0.961                0.586
+2.75        -0.162        0.155     0.446               -0.774            0.977                0.555
+3.00        -0.192        0.149     0.474               -0.810            0.992                0.547
+
+--- Kelly ---
+                            mu_arith  sigma  kelly_gaussian  kelly_empirical
+sample
+SPMO 2015-2026 (live only)     0.197  0.204           3.492            3.292
+1926-2026, alpha believed      0.159  0.189           3.014            2.921
+1926-2026, alpha zeroed        0.130  0.189           2.181            2.132
+
+--- what 'optimal' means ---
+                              criterion  leverage                                                 basis
+           growth-optimal (median CAGR)      2.62      maximises median 10y CAGR across bootstrap paths
+          robust-optimal (5th pct CAGR)      1.00              maximises the 5th percentile of 10y CAGR
+         robust-optimal (25th pct CAGR)      1.00             maximises the 25th percentile of 10y CAGR
+full Kelly (SPMO 2015-2026 (live only))      3.29     growth-optimal under that sample's drift estimate
+half Kelly (SPMO 2015-2026 (live only))      1.65                    haircut for drift-estimation error
+ full Kelly (1926-2026, alpha believed)      2.92     growth-optimal under that sample's drift estimate
+ half Kelly (1926-2026, alpha believed)      1.46                    haircut for drift-estimation error
+   full Kelly (1926-2026, alpha zeroed)      2.13     growth-optimal under that sample's drift estimate
+   half Kelly (1926-2026, alpha zeroed)      1.07                    haircut for drift-estimation error
+          drawdown budget -25% (median)       NaN largest leverage with median max drawdown inside -25%
+          drawdown budget -35% (median)      1.08 largest leverage with median max drawdown inside -35%
+          drawdown budget -50% (median)      1.56 largest leverage with median max drawdown inside -50%
+
+--- horizon: p05 CAGR by leverage ---
+                 1.00    1.25    1.50    1.75    2.00    2.25    2.50    2.75    3.00
+horizon_years
+10             0.0197  0.0036 -0.0160 -0.0411 -0.0728 -0.1164 -0.1548 -0.1958 -0.2247
+20             0.0498  0.0419  0.0317  0.0170  0.0000 -0.0166 -0.0429 -0.0768 -0.1056
+30             0.0669  0.0631  0.0566  0.0464  0.0287  0.0060 -0.0183 -0.0412 -0.0674
+40             0.0762  0.0761  0.0729  0.0661  0.0578  0.0459  0.0283  0.0039 -0.0170
+
+--- horizon: P(drawdown worse than -70%) ---
+               1.00   1.25   1.50   1.75   2.00   2.25   2.50   2.75   3.00
+horizon_years
+10              0.0  0.023  0.086  0.211  0.414  0.547  0.625  0.742  0.812
+20              0.0  0.062  0.227  0.430  0.656  0.812  0.891  0.938  0.961
+30              0.0  0.094  0.312  0.586  0.836  0.922  0.969  0.992  1.000
+40              0.0  0.094  0.367  0.648  0.875  0.953  0.969  0.992  1.000
+
+--- 5th-percentile peak, stability across bootstrap seeds ---
+    seed  p05_optimal_leverage  p05_at_1x  p05_at_1_5x  p05_at_2x  p05_at_3x
+20260910                   1.0     0.0124      -0.0233    -0.0706    -0.1918
+       1                   1.0    -0.0071      -0.0567    -0.1088    -0.2605
+       7                   1.0     0.0300       0.0094    -0.0169    -0.1333
+      99                   1.0     0.0033      -0.0365    -0.0881    -0.2294
+   12345                   1.0     0.0125      -0.0203    -0.0680    -0.1992
+
+wrote 23 files to <workspace>/work/smoke/run_analysis/

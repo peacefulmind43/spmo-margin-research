@@ -72,6 +72,7 @@ def summarise(
     equity: np.ndarray,
     n_days: int | None = None,
     contributions: np.ndarray | None = None,
+    gross_contributions: np.ndarray | None = None,
 ) -> dict[str, float]:
     """Headline statistics for an equity curve that starts at ``equity[0]``.
 
@@ -81,7 +82,7 @@ def summarise(
     equity = np.asarray(equity, dtype=float)
     n = n_days if n_days is not None else len(equity) - 1
     years = n / TRADING_DAYS
-    funded = contributions is not None and np.any(contributions)
+    funded = (contributions is not None and np.any(contributions)) or (gross_contributions is not None and np.any(gross_contributions))
     contributions = (
         np.zeros(len(equity) - 1)
         if contributions is None
@@ -91,10 +92,11 @@ def summarise(
     # Strip deposits before measuring returns: cash arriving is not performance.
     alive = equity > 0
     rets = np.zeros(len(equity) - 1)
-    valid = alive[:-1] & alive[1:]
+    valid = alive[:-1]
     rets[valid] = (equity[1:][valid] - contributions[valid]) / equity[:-1][valid] - 1.0
     # Losing all opening equity is a -100% return, not a missing observation.
-    rets[alive[:-1] & ~alive[1:]] = -1.0
+    # With no cashflow this also measures ruin as -100%. A withdrawal paid on
+    # the last active day must still be returned to the investor's performance.
     rets = np.clip(rets, -1.0, None)
 
     growth = float(np.prod(1.0 + rets))
@@ -104,8 +106,9 @@ def summarise(
     vol = float(rets.std(ddof=1) * np.sqrt(TRADING_DAYS)) if len(rets) > 1 else np.nan
     mdd = max_drawdown(index)
 
-    total_in = float(equity[0] + contributions.sum())
-    cumulative_in = equity[0] + np.cumsum(contributions)
+    gross = np.maximum(contributions, 0.0) if gross_contributions is None else np.asarray(gross_contributions, dtype=float)
+    total_in = float(equity[0] + gross.sum())
+    cumulative_in = equity[0] + np.cumsum(gross)
     with np.errstate(divide="ignore", invalid="ignore"):
         vs_in = np.where(cumulative_in > 0, equity[1:] / cumulative_in, np.nan)
 
@@ -126,6 +129,6 @@ def summarise(
             total_contributed=total_in,
             terminal_vs_contributed=float(equity[-1] / total_in),
             money_weighted_return=money_weighted_return(equity, contributions),
-            worst_vs_contributed=float(np.nanmin(vs_in)),
+            worst_vs_contributed=float(min(1.0, np.nanmin(vs_in))),
         )
     return stats

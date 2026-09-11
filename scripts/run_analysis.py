@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import json
 from pathlib import Path
 
@@ -16,7 +17,7 @@ import pandas as pd
 from spmo_margin import backtest, bootstrap, data, kelly, margin, optimal, viz
 
 ROOT = Path(__file__).resolve().parents[1]
-RESULTS = ROOT / "results"
+RESULTS = Path(os.environ.get("SPMO_RESULTS_DIR", str(ROOT / "results")))
 FIGURES = RESULTS / "figures"
 
 LEVERAGES = [1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0]
@@ -35,7 +36,7 @@ def main() -> None:
     ap.add_argument("--paths", type=int, default=4000, help="bootstrap paths")
     args = ap.parse_args()
 
-    RESULTS.mkdir(exist_ok=True)
+    RESULTS.mkdir(parents=True, exist_ok=True)
     FIGURES.mkdir(parents=True, exist_ok=True)
     facts: dict[str, object] = {}
 
@@ -204,10 +205,9 @@ def main() -> None:
     ]
 
     # ------------------------------------------------------------- horizon
-    # Ten years was the wrong default for anyone young. The optimum does not move
-    # with horizon, but the cost of sitting above it collapses: at 1.5x a bad decade
-    # loses money while a bad forty years still compounds above 5%. Drawdown goes the
-    # other way -- more years means more chances to meet the worst one.
+    # Explicit horizon sensitivity conditional on a stationary fitted return model.
+    # Age does not determine withdrawal horizon; parameter uncertainty need not
+    # disappear as these bootstrap paths get longer.
     horizon_records: dict[tuple[str, float], dict[float, float]] = {}
     for years in (10, 20, 30, 40):
         paths = bootstrap.moving_block_paths(
@@ -247,7 +247,7 @@ def main() -> None:
     )
     figures += viz.plot_kelly_curves(growth_grids, FIGURES / "kelly_growth.png")
     figures += viz.plot_horizon_effect(horizon, FIGURES / "horizon_effect.png")
-    facts["figures"] = [str(p.relative_to(ROOT)) for p in figures]
+    facts["figures"] = [os.path.relpath(p.resolve(), ROOT) for p in figures]
 
     (RESULTS / "key_facts.json").write_text(json.dumps(facts, indent=2, default=float))
 
@@ -282,7 +282,7 @@ def main() -> None:
     print(horizon.loc["prob_dd_over_70"].round(3).to_string())
     print("\n--- 5th-percentile peak, stability across bootstrap seeds ---")
     print(stability_table.round(4).to_string(index=False))
-    print(f"\nwrote {len(list(RESULTS.rglob('*')))} files to {RESULTS.relative_to(ROOT)}/")
+    print(f"\nwrote {len(list(RESULTS.rglob('*')))} files to {RESULTS.resolve()}/")
 
 
 if __name__ == "__main__":

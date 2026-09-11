@@ -3,8 +3,9 @@
 "Optimal" is not one number, it is a choice of objective:
 
 ``growth``
-    Maximise median or expected compound growth. This is Kelly. It is correct only
-    if the estimated drift is correct, and drift is the hardest thing to estimate.
+    Maximise a specified growth measure. Kelly specifically maximises expected
+    log wealth; median CAGR is a different finite-sample objective. Both depend
+    on the return model, whose estimated drift is especially uncertain.
 ``robust``
     Maximise a lower percentile of outcomes. Answers "what leverage leaves me best
     off if the next decade disappoints" instead of "if it repeats".
@@ -26,11 +27,13 @@ def _interpolate_argmax(x: np.ndarray, y: np.ndarray) -> float:
     i = int(np.nanargmax(y))
     if i == 0 or i == len(x) - 1:
         return float(x[i])
-    denom = y[i - 1] - 2 * y[i] + y[i + 1]
-    if denom == 0:
+    xs, ys = x[i-1:i+2], y[i-1:i+2]
+    if not np.isfinite(ys).all() or not (np.diff(xs) > 0).all():
         return float(x[i])
-    shift = 0.5 * (y[i - 1] - y[i + 1]) / denom
-    return float(x[i] + shift * (x[i + 1] - x[i]))
+    a, b, _ = np.polyfit(xs - x[i], ys, 2)
+    if a >= 0:
+        return float(x[i])
+    return float(np.clip(x[i] - b / (2 * a), xs[0], xs[-1]))
 
 
 def growth_optimal(bootstrap_table: pd.DataFrame, column: str = "cagr_median") -> float:
@@ -78,11 +81,11 @@ def drawdown_budget(
 
 
 def half_kelly(f_star: float) -> float:
-    """Half-Kelly: gives up ~25% of the growth for ~50% of the volatility.
+    """Half of a fitted exposure; a heuristic, not selection-bias correction.
 
-    Standard practice when the drift estimate is uncertain, which it always is. If the
-    true optimum is half of what you estimated, full Kelly on the estimate is already
-    over-levered, while half-Kelly is still on the safe side of the growth peak.
+    The familiar growth/volatility tradeoff assumes a quadratic growth model and
+    common borrowing/lending rate. Tiered margin, costly cash and liquidation do
+    not satisfy those assumptions. No statistically calibrated haircut is implied.
     """
     return f_star / 2.0
 

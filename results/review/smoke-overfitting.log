@@ -1,0 +1,38 @@
+
+=== what each bias was worth ===
+                                                                    mu_arith  sigma  full_kelly  half_kelly  p05_optimal  median_optimal
+build
+1. as originally shipped (SPY map, in-sample alpha, under-charged)     0.163  0.191       3.110       1.555          1.0           3.000
+2. financing charged for calendar days                                 0.163  0.191       2.990       1.495          1.0           3.000
+3. in-sample alpha removed                                             0.132  0.191       2.169       1.085          1.0           2.329
+4. factor-built history back to 1926, no residual risk                 0.130  0.168       2.663       1.331          1.0           2.517
+5. idiosyncratic risk restored (the honest build)                      0.130  0.189       2.132       1.066          1.0           2.545
+for reference: honest build with the alpha believed                    0.159  0.189       2.921       1.460          1.0           3.000
+
+=== does the answer depend on including the Great Depression? ===
+                      mu_arith  sigma  full_kelly  half_kelly  p05_optimal  median_optimal
+build
+1926-2026 (all)          0.130  0.189       2.132       1.066          1.0           2.545
+1946-2026 (post-war)     0.145  0.176       2.906       1.453          1.0           3.000
+1970-2026                0.148  0.188       2.651       1.325          1.0           2.544
+1990-2026                0.159  0.198       2.690       1.345          1.0           3.000
+
+=== is the momentum factor premium real? (risk kept, payment varied) ===
+         mu_arith  sigma  full_kelly  half_kelly  p05_optimal  median_optimal
+haircut
+0.00        0.130  0.189       2.132       1.066          1.0           2.545
+0.25        0.125  0.189       2.011       1.005          1.0           2.445
+0.50        0.121  0.189       1.889       0.945          1.0           2.316
+0.75        0.116  0.189       1.767       0.883          1.0           2.121
+1.00        0.111  0.189       1.644       0.822          1.0           1.912
+
+=== bootstrap block length (a free parameter) ===
+            p05_optimal  median_optimal  p05_cagr_at_1_5x
+block_days
+5                   1.0          2.0795            0.0084
+10                  1.0          2.4717           -0.0215
+21                  1.0          2.5453           -0.0233
+42                  1.0          1.9788           -0.0056
+63                  1.0          2.1038           -0.0456
+
+SPMO on market + momentum: {'alpha_daily': 0.00013220876469319693, 'alpha_annual': 0.03331660870268562, 'alpha_se_annual': 0.02861437007741894, 'alpha_t_stat': 1.1643313696071003, 'beta_market': 0.968894669415931, 'beta_momentum': 0.3149547472291983, 'r2': 0.7885457938336239, 'resid_vol_daily': 0.0059096831722396615, 'n_obs': 2715, 'window': ['2015-10-13', '2026-07-31']}

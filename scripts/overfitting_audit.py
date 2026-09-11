@@ -43,6 +43,7 @@ the payment for carrying it.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import numpy as np
@@ -51,7 +52,7 @@ import pandas as pd
 from spmo_margin import bootstrap, data, kelly, optimal
 
 ROOT = Path(__file__).resolve().parents[1]
-RESULTS = ROOT / "results"
+RESULTS = Path(os.environ.get("SPMO_RESULTS_DIR", str(ROOT / "results")))
 
 LEVERAGES = [1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0]
 BENCHMARK = 0.0363
@@ -98,7 +99,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--paths", type=int, default=2500)
     args = ap.parse_args()
-    RESULTS.mkdir(exist_ok=True)
+    RESULTS.mkdir(parents=True, exist_ok=True)
 
     spy_build, spy_fit = data.extend_with_proxy("SPMO", "SPY")
     factor_alpha, factor_fit = data.extend_with_factors(
