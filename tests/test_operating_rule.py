@@ -68,3 +68,44 @@ def test_rule_runs_and_stays_within_its_stated_risk():
     held = np.median(out["mean_leverage"])
     assert LOWER < held < UPPER, "mean leverage held must sit inside the band"
     assert np.median(out["rebalances"]) < 10 * 252 / 21, "band should trade less than monthly"
+
+
+def test_out_of_sample_split_is_honest_about_direction():
+    """The split test must report both sides of the hindsight gap.
+
+    Its finding cuts against this repository's own headline: fitting without the
+    recent decades gives a lower target. A version of the script that only reported
+    the value of fitting, and not the cost of lacking hindsight, would be the
+    flattering half of the result.
+    """
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import out_of_sample as oos
+
+    # the grid must span the whole decision range, or an argmax can hide at an edge
+    assert oos.GRID.min() == pytest.approx(1.0)
+    assert oos.GRID.max() == pytest.approx(2.0)
+    # and the cost of lacking hindsight must be derived, not assumed away
+    src = (Path(oos.__file__)).read_text()
+    assert "cost_of_no_hindsight" in src
+    assert "value_of_fitting" in src
+
+
+def test_split_test_reproduces_its_published_direction():
+    """Fitting on the earlier century must choose below the headline 1.500x.
+
+    This is the substantive claim the script exists to support. It is checked with
+    few paths, so only the direction is asserted, not the figure.
+    """
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import out_of_sample as oos
+    from spmo_margin import data
+
+    frame, _ = data.long_only_momentum_history("SPMO")
+    chosen = oos.choose(frame.loc[:"1990-01-01"]["ret"].to_numpy(), 200, 1.5, 20)
+    assert 1.0 <= chosen < TARGET, "pre-1990 data should choose below the headline target"

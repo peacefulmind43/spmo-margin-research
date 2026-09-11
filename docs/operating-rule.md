@@ -99,6 +99,16 @@ account size.
 - **A shorter horizon.** At ten years the same objective gives a materially lower
   answer. The 40-year figure is not transferable to money that might be needed
   sooner — and "needed sooner" includes being frightened out at a bottom.
+- **The target itself depends on the recent decades.** `scripts/out_of_sample.py`
+  refits using only data before a cut date and evaluates on the realised remainder.
+  Fitting on 1926-1989 chooses **1.314x**; fitting on 1926-1969 chooses **1.130x**.
+  Both are below this rule's 1.500x, which is fitted through 2026 and therefore
+  carries the information that US equities did unusually well after 1990. The gap
+  runs the other way too: the leverage that turned out best in hindsight was
+  1.95-2.00x, costing 3.5-4.3 points of CAGR against what was choosable at the time.
+  Fitting still beat holding 1.0x in both splits, but by only +0.31 and +1.97 points.
+  If a single figure had to be moved on this evidence it would be moved toward the
+  lower half of the band, where 1.300x already sits.
 - **Momentum's factor premium not persisting.** Zeroing the fund's own alpha still
   credits about 2.1%/yr of momentum premium. Removing it takes full Kelly from
   2.15x to 1.66x.
