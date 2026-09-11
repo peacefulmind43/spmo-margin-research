@@ -14,8 +14,14 @@ anything else here.**
 | Horizon | Answer |
 |---|---|
 | ~10 years | **1.112x** |
-| **30–40 years** | **1.474x**, rebalanced back whenever leverage leaves **[1.387x, 1.560x]** |
+| **30–40 years** | **1.475x**, rebalanced back whenever leverage leaves **[1.33x, 1.63x]** |
 | any horizon | **stop by 2.0x** |
+
+1.475x is the mean of four estimates — two objectives crossed with two independent
+reconstructions of the pre-2015 history — which span 1.441x to 1.521x. The band is
+**not** an argmax: its optimum moved from 5.9% to 2.0% purely on which history was
+used while utility stayed flat, so it is unidentified, and ±10% is chosen on trade
+frequency instead.
 
 Those come from `scripts/optimise_target.py`, which states an objective and solves it
 rather than reading a round number off a table — see
@@ -139,9 +145,15 @@ are not a claim about the world, and the script prints that warning itself.
 
 ### The no-trade band
 
-**Rebalance back to 1.474x whenever leverage leaves [1.387x, 1.560x]** — a ±5.9%
-band, optimised on the *same* CRRA objective as the target. Choosing a target on one
-criterion and a band on another is how you end up with a pair nobody can defend.
+**Rebalance back to 1.475x whenever leverage leaves [1.33x, 1.63x]** — a ±10% band.
+
+The band was optimised on the *same* CRRA objective as the target, because choosing
+a target on one criterion and a band on another is how you end up with a pair nobody
+can defend. But the honest result is that **the band is not identified**: its argmax
+came out at ±5.9% on the constructed history and ±2.0% on the measured one, while
+utility stayed flat across the whole 2%–12.5% range in both. The optimum is noise
+inside a plateau, so the width is chosen on the thing that is *not* noise — trade
+count.
 
 | Band | Range | Mean leverage held | median CAGR | 5th pct CAGR | trades / 40y | utility |
 |---|---|---|---|---|---|---|
@@ -152,11 +164,10 @@ criterion and a band on another is how you end up with a pair nobody can defend.
 | ±15% | [1.253, 1.695] | 1.409x | 13.54% | +5.70% | 12 | −0.2297 |
 | ±30% | [1.032, 1.916] | 1.214x | 12.68% | +6.16% | 1 | −0.2392 |
 
-Be honest about what that table shows: **utility is flat from ±2% to ±12.5%**, with
-every value inside −0.2277 to −0.2292. The argmax at ±5.9% is noise inside a plateau.
-What is *not* noise is the trade count, which falls from 521 to 28 across that same
-plateau — so if you want a practical rule rather than an argmax, **±10% is
-indistinguishable on every return measure and trades twenty times less.**
+Utility is flat from ±2% to ±12.5% — every value inside −0.2277 to −0.2292 — while
+the trade count falls from 521 to 28 across that same plateau. **±10% is
+indistinguishable on every return measure and trades twenty times less**, so that is
+the rule worth following.
 
 The wider bands look better on the 5th percentile, and it is the same trap as
 everywhere else in this repo: the ±30% band holds a mean leverage of 1.214x, not
@@ -179,7 +190,8 @@ unmanageable — a 10% fall would breach it immediately and repeatedly.
 
 ```
 python scripts/optimise_target.py --gamma 1.5 --horizon 40
-python scripts/position_calculator.py --equity 50000 --leverage 1.474 --band 0.059
+python scripts/optimise_target.py --gamma 1.5 --history measured
+python scripts/position_calculator.py --equity 50000 --leverage 1.475 --band 0.10
 ```
 
 ## Why not more
@@ -213,13 +225,82 @@ Nobody collects that.
 And the one bias the audit could not remove — SPMO was chosen *because* it has done
 well — points toward leverage, so the true case is weaker than the tables show.
 
+## Where the pre-2015 data comes from
+
+It is worth being blunt about this, because it is the largest assumption in the repo:
+**SPMO launched in October 2015, so 89.6% of the "history" used here is not SPMO.**
+Two different answers to that problem are implemented, and the conclusion is only
+trustworthy because they agree.
+
+**`extend_with_factors` — constructed.** Regress SPMO's 2,715 real days on the market
+and momentum factors, then apply the loadings backwards:
+
+    ret = 0.969 x market excess + 0.315 x UMD + risk-free + resampled residual
+
+Everything before 2015 is therefore a model, and a model with known weaknesses: the
+loadings are estimated over ten years and applied to ninety, and they are not even
+stable within the estimation window (250-day rolling market beta ranges 0.03 to 1.20,
+momentum beta −0.01 to 0.61). Worse, **UMD is long–short and SPMO is long only.** A
+momentum crash is exactly the event where the shorted losers rip upward — UMD lost
+27% in April 2009 — and a long-only fund holds none of those shorts, so it merely
+underperforms. Proxying SPMO's crash behaviour with a UMD loading uses an instrument
+that does not share its structure, however well the regression fits. And before 1957
+there was no S&P 500 at all, while French's factors cover CRSP-listed stocks rather
+than any index.
+
+**`long_only_momentum_history` — measured.** Ken French's "BIG HiPRIOR" bucket is the
+value-weighted daily return of big US stocks in the top third by prior 12–2 month
+return, available since November 1926. Large cap, momentum screened, long only,
+value weighted, no leverage — structurally the thing SPMO is, and a real portfolio's
+real returns. No regression, no synthesis, no residuals, nothing that can be tuned.
+
+It fits SPMO about as well as the two constructed factors do, using one regressor
+instead of two:
+
+| History | R² against live SPMO | residual alpha |
+|---|---|---|
+| constructed, market + UMD | 0.7885 | +3.33%/yr (t = 1.16) |
+| **measured, BIG HiPRIOR** | **0.7823** | +5.43%/yr (t = 1.87) |
+
+SPMO's beta to the measured series is 0.867 and a positive intercept survives, so
+using it unadjusted is the conservative reading of both. Its century-long profile is
+nearly identical to the constructed one — 13.89%/yr at 18.92% vol against 12.95% at
+18.85% — which is the first sign that the choice does not matter much.
+
+### The two histories give the same answer
+
+| Objective | constructed | measured |
+|---|---|---|
+| CRRA expected utility, gamma = 1 | 2.106x | **2.109x** |
+| CRRA expected utility, gamma = 1.25 | 1.754x | 1.801x |
+| CRRA expected utility, gamma = 1.5 | 1.474x | 1.521x |
+| CRRA expected utility, gamma = 2 | 1.112x | 1.148x |
+| max median CAGR s.t. P(dd < −70%) ≤ 1/3 | 1.463x | 1.441x |
+
+The log-utility row agrees to 0.1%. All four bottom-weighted estimates land between
+**1.441x and 1.521x**. So the leverage conclusion does not rest on the synthetic
+construction — swapping it for a hundred years of measured returns from a real
+long-only momentum portfolio moves the target by under 3%.
+
+What neither history can tell you is how a *momentum-screened S&P 500 fund* would
+have behaved in 1932. Both are answers to a nearby question. Reproduce the comparison
+with `python scripts/optimise_target.py --history measured`.
+
+### A parsing bug found on the way
+
+French's portfolio files contain two tables under identical date stamps — value
+weighted, then equal weighted. A naive parse reads both and doubles every row, which
+leaves OLS coefficients untouched while **inflating every t-statistic by sqrt(2)**:
+exactly the error that turns an insignificant alpha into a significant one. The first
+attempt here hit it (5,430 overlapping days against SPMO's real 2,715). The factor
+and momentum files were checked and are clean — 26,195 unique dates, no section
+headers — so the t = 1.16 on the constructed alpha stands. The loader now truncates
+at the section header and raises on any duplicate date, with a test guarding it.
+
 ## The full history, including the parts SPMO missed
 
-SPMO launched in October 2015. Its own record contains no 2008, no 2000–02 and no
-1929 — the events that decide whether leverage works. It is also 97% market and 32%
-momentum factor, so its history can be rebuilt from real factor returns going back
-to 1926 (see [the audit](#the-overfitting-audit) for the regression and why the
-intercept is set to zero):
+SPMO's own record contains no 2008, no 2000–02 and no 1929 — the events that decide
+whether leverage works. Extended by either method above:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="results/figures/equity_curves_dark.png">
@@ -572,7 +653,7 @@ python scripts/overfitting_audit.py     # what each bias was worth -- read this 
 python scripts/optimise_target.py       # solves for the target and band
 python scripts/funding_strategies.py    # contributions and funding strategy
 python scripts/position_calculator.py --equity 50000 --leverage 1.5 --band 0.15
-pytest                                  # 116 tests
+pytest                                  # 117 tests
 ```
 
 Data comes from Yahoo Finance (SPMO, SPY total return), FRED (`DFF`, the Fed Funds
@@ -602,7 +683,7 @@ contributions could push the balance from debit into cash.
 | `spmo_margin/bootstrap.py` | vectorised twin + moving-block resampling |
 | `spmo_margin/kelly.py` | Gaussian and empirical log-growth optimum |
 | `spmo_margin/optimal.py` | the several meanings of "optimal" |
-| `spmo_margin/data.py` | prices, Fed Funds, Fama-French factors, history reconstruction |
+| `spmo_margin/data.py` | prices, Fed Funds, Fama-French factors and portfolios, both histories |
 | `scripts/overfitting_audit.py` | the bias audit and every sensitivity sweep |
 | `scripts/optimise_target.py` | states an objective and solves for target + band |
 | `scripts/position_calculator.py` | loan, interest bill and margin-call distance |

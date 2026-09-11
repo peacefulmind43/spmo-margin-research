@@ -16,6 +16,7 @@ FRED_DFF = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFF"
 FRENCH_BASE = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp"
 FRENCH_FACTORS = f"{FRENCH_BASE}/F-F_Research_Data_Factors_daily_CSV.zip"
 FRENCH_MOMENTUM = f"{FRENCH_BASE}/F-F_Momentum_Factor_daily_CSV.zip"
+FRENCH_PORTFOLIOS = f"{FRENCH_BASE}/6_Portfolios_ME_Prior_12_2_Daily_CSV.zip"
 
 
 def _cache_path(name: str) -> Path:
@@ -71,8 +72,18 @@ def build_dataset(ticker: str = "SPMO", refresh: bool = False) -> pd.DataFrame:
     return df
 
 
-def _read_french_zip(url: str, columns: list[str]) -> pd.DataFrame:
-    """Parse one of Ken French's daily factor zips into decimal returns."""
+def _read_french_zip(
+    url: str, columns: list[str], stop_at: str | None = None
+) -> pd.DataFrame:
+    """Parse one of Ken French's daily zips into decimal returns.
+
+    ``stop_at`` truncates at a section header. Several of these files contain more
+    than one table -- the portfolio files carry value-weighted returns followed by
+    equal-weighted ones, under identical date stamps -- so a naive parse silently
+    doubles every row. Duplicated rows leave OLS coefficients unchanged while
+    inflating every t-statistic by sqrt(2), which is the kind of error that makes an
+    insignificant alpha look significant.
+    """
     import io
     import urllib.request
     import zipfile
@@ -82,11 +93,20 @@ def _read_french_zip(url: str, columns: list[str]) -> pd.DataFrame:
     with zipfile.ZipFile(io.BytesIO(payload)) as archive:
         raw = archive.read(archive.namelist()[0]).decode("latin-1")
 
+    lines = raw.splitlines()
+    if stop_at is not None:
+        for i, line in enumerate(lines):
+            if stop_at in line:
+                lines = lines[:i]
+                break
+
     rows = []
-    for line in raw.splitlines():
+    for line in lines:
         parts = [p.strip() for p in line.split(",")]
         if len(parts) == len(columns) + 1 and re.fullmatch(r"\d{8}", parts[0]):
             rows.append(parts)
+    if len({r[0] for r in rows}) != len(rows):
+        raise ValueError(f"duplicate dates parsed from {url} -- check section headers")
     frame = pd.DataFrame(rows, columns=["date", *columns])
     frame["date"] = pd.to_datetime(frame["date"], format="%Y%m%d")
     frame = frame.set_index("date").astype(float) / 100.0
@@ -112,6 +132,93 @@ def load_french_factors(refresh: bool = False) -> pd.DataFrame:
         frame.to_csv(path)
     frame.index = pd.DatetimeIndex(frame.index).normalize()
     return frame
+
+
+def load_long_only_momentum(refresh: bool = False) -> pd.Series:
+    """Daily total return of large-cap, high-prior-return US stocks since 1926.
+
+    This is Ken French's "BIG HiPRIOR" bucket: the value-weighted return of big
+    stocks in the top third by prior 12-2 month return, rebalanced daily. It is the
+    closest thing to SPMO that has a real hundred-year record -- large cap, momentum
+    screened, long only, value weighted, no leverage.
+
+    It matters that it is long only. The academic momentum factor UMD is
+    winners *minus* losers, and a momentum crash is precisely the event where the
+    losers rip upward: UMD lost 27% in April 2009. A long-only fund holds no shorts,
+    so it merely underperforms in that event rather than being destroyed by it.
+    Proxying SPMO with a loading on UMD therefore models its crash behaviour with an
+    instrument that does not share its structure, however well the regression fits.
+    """
+    path = _cache_path("big_hiprior")
+    if path.exists() and not refresh:
+        frame = pd.read_csv(path, index_col=0, parse_dates=True)
+    else:
+        frame = _read_french_zip(
+            FRENCH_PORTFOLIOS,
+            ["small_lo", "small_mid", "small_hi", "big_lo", "big_mid", "big_hi"],
+            stop_at="Equal Weighted",
+        )
+        frame = frame[["big_hi"]]
+        frame.to_csv(path)
+    series = frame["big_hi"].astype(float)
+    series.index = pd.DatetimeIndex(series.index).normalize()
+    return series.sort_index()
+
+
+def long_only_momentum_history(
+    ticker: str = "SPMO",
+    splice_live: bool = True,
+    refresh: bool = False,
+) -> tuple[pd.DataFrame, dict[str, float]]:
+    """A century of momentum returns that are measured rather than constructed.
+
+    :func:`extend_with_factors` *builds* a pre-2015 history from factor loadings
+    estimated on ten years of data. This does not build anything: it uses the actual
+    daily returns of a real long-only large-cap momentum portfolio, optionally with
+    the live ETF spliced over its own period. No regression, no synthesis, no
+    resampled residuals, and therefore nothing that can be tuned.
+
+    The price is that it is not SPMO. The fit statistics returned say how close the
+    two are over the overlap; SPMO's beta to it is below one and a positive intercept
+    survives, so using this series unadjusted is the conservative reading of both.
+    """
+    proxy = load_long_only_momentum(refresh=refresh)
+    live = load_total_return(ticker, refresh=refresh).pct_change().dropna()
+    factors = load_french_factors(refresh=refresh)
+
+    joined = pd.DataFrame({"live": live}).join(
+        pd.DataFrame({"proxy": proxy}), how="inner"
+    ).join(factors[["rf"]], how="inner").dropna()
+    y = (joined["live"] - joined["rf"]).to_numpy()
+    x = (joined["proxy"] - joined["rf"]).to_numpy()
+    design = np.column_stack([np.ones(len(x)), x])
+    coef, *_ = np.linalg.lstsq(design, y, rcond=None)
+    resid = y - design @ coef
+    dof = len(y) - 2
+    se = np.sqrt(np.diag(float((resid**2).sum()) / dof * np.linalg.inv(design.T @ design)))
+    stats = {
+        "alpha_annual": float(coef[0]) * 252,
+        "alpha_t_stat": float(coef[0] / se[0]),
+        "beta_proxy": float(coef[1]),
+        "r2": 1.0 - float((resid**2).sum()) / float(((y - y.mean()) ** 2).sum()),
+        "n_obs": int(len(y)),
+        "overlap": [str(joined.index[0].date()), str(joined.index[-1].date())],
+    }
+
+    combined = proxy.copy()
+    if splice_live:
+        overlap = combined.index.intersection(live.index)
+        combined.loc[overlap] = live.reindex(overlap)
+
+    frame = pd.DataFrame({"ret": combined.sort_index()})
+    benchmark = load_benchmark_rate(refresh=refresh)
+    frame["bm"] = benchmark.reindex(frame.index).ffill()
+    frame["bm"] = frame["bm"].fillna(
+        factors["rf"].reindex(frame.index) * TRADING_DAYS_PER_YEAR
+    )
+    frame["bm"] = frame["bm"].clip(lower=0.0).bfill()
+    frame["is_synthetic"] = ~frame.index.isin(live.index) if splice_live else True
+    return frame, stats
 
 
 def fit_factor_model(

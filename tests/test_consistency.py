@@ -354,3 +354,18 @@ def test_crra_utility_and_refinement():
 
     # and falls back to the grid point when the maximum is on the boundary
     assert _refine(grid, np.array([3.0, 2.0, 1.0])) == pytest.approx(1.0)
+
+
+def test_french_parser_rejects_duplicated_sections():
+    """The portfolio files hold two tables under the same date stamps.
+
+    Parsing both doubles every row, which leaves OLS coefficients untouched while
+    inflating every t-statistic by sqrt(2) -- exactly the error that turns an
+    insignificant alpha into a significant one. The loader must refuse.
+    """
+    from spmo_margin.data import load_french_factors, load_long_only_momentum
+
+    for series in (load_french_factors(), load_long_only_momentum()):
+        index = series.index
+        assert index.is_unique, "duplicate dates reached a loaded series"
+        assert index.is_monotonic_increasing

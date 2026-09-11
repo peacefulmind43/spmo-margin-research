@@ -95,10 +95,27 @@ def main() -> None:
     ap.add_argument("--horizon", type=int, default=40, help="holding period in years")
     ap.add_argument("--gamma", type=float, default=1.5, help="relative risk aversion")
     ap.add_argument("--dd-threshold", type=float, default=1 / 3)
+    ap.add_argument(
+        "--history",
+        choices=("factors", "measured"),
+        default="factors",
+        help="'factors' builds pre-2015 returns from estimated loadings; 'measured' "
+        "uses the real returns of a long-only large-cap momentum portfolio instead",
+    )
     args = ap.parse_args()
     RESULTS.mkdir(exist_ok=True)
 
-    frame, _ = data.extend_with_factors("SPMO")
+    if args.history == "measured":
+        frame, fit = data.long_only_momentum_history("SPMO")
+        print(
+            f"\nhistory: measured -- real long-only large-cap momentum returns."
+            f"\nSPMO vs proxy over {fit['n_obs']} overlapping days: beta "
+            f"{fit['beta_proxy']:.3f}, alpha {fit['alpha_annual']:+.2%}/yr "
+            f"(t = {fit['alpha_t_stat']:.2f}), R2 {fit['r2']:.4f}"
+        )
+    else:
+        frame, _ = data.extend_with_factors("SPMO")
+        print("\nhistory: factors -- pre-2015 returns constructed from loadings")
     horizon = args.horizon * 252
     paths = bootstrap.moving_block_paths(
         frame["ret"].to_numpy(), args.paths, horizon, seed=11
