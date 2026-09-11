@@ -1,0 +1,638 @@
+<title>SPMO Margin Rule</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    color-scheme: light;
+    --ground: #f6f8f5;
+    --surface: #ffffff;
+    --sunk: #eef1ed;
+    --ink: #16202b;
+    --ink-2: #45525c;
+    --ink-3: #6d7a83;
+    --rule: #dde2dd;
+    --rule-2: #c6cec7;
+    --accent: #1f5f8b;
+    --accent-soft: #dce8f0;
+    --accent-line: #8fb4cc;
+    --risk: #a8412c;
+    --risk-soft: #f2e2dd;
+    --good: #2c6e49;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #10151a;
+      --surface: #181f26;
+      --sunk: #1e262e;
+      --ink: #e7ece8;
+      --ink-2: #aab5bc;
+      --ink-3: #808d95;
+      --rule: #2a333b;
+      --rule-2: #3a454e;
+      --accent: #74aed3;
+      --accent-soft: #1c2f3d;
+      --accent-line: #3d6d8f;
+      --risk: #d9785d;
+      --risk-soft: #33211c;
+      --good: #63a882;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #10151a;
+    --surface: #181f26;
+    --sunk: #1e262e;
+    --ink: #e7ece8;
+    --ink-2: #aab5bc;
+    --ink-3: #808d95;
+    --rule: #2a333b;
+    --rule-2: #3a454e;
+    --accent: #74aed3;
+    --accent-soft: #1c2f3d;
+    --accent-line: #3d6d8f;
+    --risk: #d9785d;
+    --risk-soft: #33211c;
+    --good: #63a882;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding-block: 48px 72px;
+    padding-left: 20px;
+    padding-right: 20px;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Source Sans 3", system-ui, -apple-system, sans-serif;
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; }
+  .col { max-width: 64ch; }
+
+  /* ---------- masthead ---------- */
+  .masthead { border-bottom: 2px solid var(--ink); padding-bottom: 20px; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3); margin: 0 0 14px;
+  }
+  h1 {
+    font-family: Spectral, Georgia, serif;
+    font-weight: 600; font-size: clamp(32px, 6vw, 46px); line-height: 1.08;
+    letter-spacing: -.012em; margin: 0 0 12px; text-wrap: balance;
+  }
+  .standfirst {
+    font-family: Spectral, Georgia, serif; font-size: 19px; line-height: 1.5;
+    color: var(--ink-2); margin: 0; max-width: 54ch;
+  }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 22px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px;
+    color: var(--ink-3);
+  }
+
+  /* ---------- sections ---------- */
+  section { margin-top: 56px; }
+  h2 {
+    font-family: Spectral, Georgia, serif; font-weight: 600;
+    font-size: 25px; line-height: 1.2; letter-spacing: -.008em;
+    margin: 0 0 4px; text-wrap: balance;
+  }
+  .sub {
+    font-size: 14.5px; color: var(--ink-3); margin: 0 0 22px;
+    padding-bottom: 14px; border-bottom: 1px solid var(--rule);
+  }
+  p { margin: 0 0 15px; }
+  .col p:last-child { margin-bottom: 0; }
+  strong { font-weight: 600; }
+  em.q { font-style: normal; color: var(--risk); font-weight: 600; }
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .92em; font-variant-numeric: tabular-nums;
+  }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  /* ---------- term sheet ---------- */
+  .sheet {
+    background: var(--surface); border: 1px solid var(--rule-2);
+    border-top: 3px solid var(--accent); margin-top: 30px;
+  }
+  .sheet-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px;
+    padding: 20px 24px 0;
+  }
+  .sheet-head .label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11.5px;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--ink-3);
+    width: 100%;
+  }
+  .rule-line {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums; font-size: clamp(21px, 4.4vw, 30px);
+    font-weight: 500; color: var(--ink); line-height: 1.3;
+  }
+  .rule-line .op { color: var(--ink-3); font-weight: 400; }
+  .sheet-terms {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 0; margin-top: 20px; border-top: 1px solid var(--rule);
+  }
+  .term { padding: 14px 24px 16px; border-right: 1px solid var(--rule); }
+  .term:last-child { border-right: 0; }
+  .term dt {
+    font-size: 12.5px; color: var(--ink-3); margin: 0 0 3px;
+    letter-spacing: .02em;
+  }
+  .term dd {
+    margin: 0; font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums; font-size: 16px; color: var(--ink);
+  }
+
+  /* ---------- tables ---------- */
+  .scroll { overflow-x: auto; margin-top: 22px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  caption {
+    caption-side: top; text-align: left; font-size: 13.5px; color: var(--ink-3);
+    padding-bottom: 10px;
+  }
+  th, td {
+    padding: 9px 14px 9px 0; text-align: left; border-bottom: 1px solid var(--rule);
+    vertical-align: baseline;
+  }
+  th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 500;
+    font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink-3); border-bottom-color: var(--rule-2);
+  }
+  td.n, th.n { text-align: right; padding-right: 0; font-variant-numeric: tabular-nums; }
+  td.n { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  tr.pick td { background: var(--accent-soft); font-weight: 600; }
+  tr.pick td:first-child { box-shadow: inset 3px 0 0 var(--accent); padding-left: 11px; }
+
+  /* head-to-head: the chosen column carries the emphasis, not a row */
+  .vs th, .vs td { padding-left: 14px; }
+  .vs th:first-child, .vs td:first-child { padding-left: 0; }
+  .vs td:first-child { color: var(--ink-2); }
+  .vs .pickcol { background: var(--accent-soft); }
+  .vs thead .pickcol { box-shadow: inset 0 3px 0 var(--accent); }
+  .vs td.pickcol { font-weight: 600; color: var(--ink); }
+  .vs .opt {
+    display: block; font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .04em; text-transform: none;
+    font-weight: 400; color: var(--ink-3); margin-top: 3px;
+  }
+  .vs thead th { vertical-align: bottom; }
+  td .risk { color: var(--risk); font-weight: 600; }
+  td .good { color: var(--good); }
+
+  /* ---------- chart ---------- */
+  figure { margin: 26px 0 0; }
+  .chart-box {
+    background: var(--surface); border: 1px solid var(--rule-2);
+    padding: 18px 12px 8px; overflow-x: auto;
+  }
+  svg { display: block; width: 100%; min-width: 560px; height: auto; }
+  figcaption { font-size: 14px; color: var(--ink-3); margin-top: 12px; max-width: 62ch; }
+
+  /* ---------- revisions ---------- */
+  .revisions { margin-top: 26px; display: grid; gap: 2px; }
+  .rev {
+    display: grid; grid-template-columns: 54px 1fr; gap: 0 18px;
+    background: var(--surface); border: 1px solid var(--rule);
+    padding: 16px 20px;
+  }
+  .rev .no {
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px;
+    color: var(--accent); font-weight: 500; padding-top: 2px;
+  }
+  .rev h3 {
+    font-family: "Source Sans 3", sans-serif; font-size: 16px; font-weight: 600;
+    margin: 0 0 5px;
+  }
+  .rev p { margin: 0; font-size: 15px; color: var(--ink-2); }
+  .shift {
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px;
+    color: var(--ink); margin-top: 8px !important; font-variant-numeric: tabular-nums;
+  }
+  .shift .arrow { color: var(--ink-3); }
+
+  /* ---------- callout ---------- */
+  .callout {
+    margin-top: 26px; background: var(--risk-soft);
+    border-left: 3px solid var(--risk); padding: 18px 22px;
+  }
+  .callout p { margin: 0; max-width: 60ch; }
+  .callout .h {
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11.5px;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--risk);
+    display: block; margin-bottom: 7px; font-weight: 500;
+  }
+
+  .checks { margin-top: 24px; display: grid; gap: 12px; }
+  .check {
+    background: var(--sunk); padding: 15px 18px; border: 1px solid var(--rule);
+  }
+  .check h3 {
+    font-family: "Source Sans 3", sans-serif; font-size: 15.5px; font-weight: 600;
+    margin: 0 0 4px;
+  }
+  .check p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+
+  footer {
+    margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--rule);
+    font-size: 13.5px; color: var(--ink-3); max-width: 64ch;
+  }
+  footer p { margin: 0 0 9px; }
+
+  @media (max-width: 560px) {
+    .rev { grid-template-columns: 1fr; gap: 8px; }
+    .term { border-right: 0; border-bottom: 1px solid var(--rule); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Position sizing · decision record</p>
+    <h1>How much margin on SPMO</h1>
+    <p class="standfirst">A target, a rebalance band, and the measurement showing that
+      the target has no third decimal.</p>
+    <div class="meta">
+      <span>12 September 2026</span>
+      <span>Invesco S&amp;P 500 Momentum ETF</span>
+      <span>IBKR Pro USD financing</span>
+      <span>242 tests passing</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>The rule</h2>
+    <p class="sub">What was chosen, and the conditions it depends on.</p>
+
+    <div class="sheet">
+      <div class="sheet-head">
+        <span class="label">Operating rule</span>
+        <span class="rule-line">1.500<span class="op">×</span></span>
+        <span class="rule-line op">rebalance outside</span>
+        <span class="rule-line">(1.300<span class="op">×</span>, 1.700<span class="op">×</span>)</span>
+      </div>
+      <dl class="sheet-terms">
+        <div class="term"><dt>Financing</dt><dd>5.13%</dd></div>
+        <div class="term"><dt>Tax shield</dt><dd>none</dd></div>
+        <div class="term"><dt>Asset drag</dt><dd>30 bp/yr</dd></div>
+        <div class="term"><dt>Horizon</dt><dd>40 years</dd></div>
+        <div class="term"><dt>Trades</dt><dd>~19 total</dd></div>
+      </dl>
+    </div>
+
+    <div class="col" style="margin-top:26px">
+      <p>The rule is a ratio, so it does not depend on the size of the account and
+        does not need restating as the account grows or shrinks. At 1.500× the position
+        is <span class="mono">1.50×</span> equity against a loan of
+        <span class="mono">0.50×</span> equity, and the financing costs
+        <span class="mono">2.67%</span> of equity a year. A margin call arrives after a
+        <span class="mono">−55.6%</span> decline; equity reaches zero at
+        <span class="mono">−66.7%</span>. Those three figures hold at any account size.</p>
+      <p>Leverage drifts as <code>L′ = L(1+x) / (1+Lx)</code>, so from 1.500× a 16%
+        fall reaches the upper bound and a 31% rally reaches the lower one. Both
+        bounds bind in practice, which means the rule sells after declines
+        <em>and borrows more after rallies</em> — the second half is the part worth
+        deciding on deliberately.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Against holding no margin at all</h2>
+    <p class="sub">The only comparison that decides anything: the rule against 1.000×, same paths, same forty years.</p>
+
+    <div class="scroll">
+      <table class="vs">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="n">No margin<br><span class="opt">1.000×</span></th>
+            <th class="n pickcol">The rule<br><span class="opt">1.500×, band (1.3, 1.7)</span></th>
+            <th class="n">Difference</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Median growth of equity</td>
+            <td class="n">112×</td><td class="n pickcol">234×</td>
+            <td class="n"><span class="good">2.1× more</span></td>
+          </tr>
+          <tr>
+            <td>5th-percentile growth</td>
+            <td class="n">14.8×</td><td class="n pickcol">10.6×</td>
+            <td class="n"><span class="risk">28% less</span></td>
+          </tr>
+          <tr>
+            <td>Median CAGR</td>
+            <td class="n">12.52%</td><td class="n pickcol">14.61%</td>
+            <td class="n"><span class="good">+2.09 pts</span></td>
+          </tr>
+          <tr>
+            <td>5th-percentile CAGR</td>
+            <td class="n">+6.97%</td><td class="n pickcol">+6.09%</td>
+            <td class="n"><span class="risk">−0.88 pts</span></td>
+          </tr>
+          <tr>
+            <td>Median worst drawdown</td>
+            <td class="n">−48%</td><td class="n pickcol">−67%</td>
+            <td class="n"><span class="risk">19 pts deeper</span></td>
+          </tr>
+          <tr>
+            <td>Chance of a drawdown past −70%</td>
+            <td class="n">3%</td><td class="n pickcol">37%</td>
+            <td class="n"><span class="risk">12× as likely</span></td>
+          </tr>
+          <tr>
+            <td>Financing paid, per year</td>
+            <td class="n">0</td><td class="n pickcol">2.67% of equity</td>
+            <td class="n">—</td>
+          </tr>
+          <tr>
+            <td>Trades over forty years</td>
+            <td class="n">0</td><td class="n pickcol">~19</td>
+            <td class="n">—</td>
+          </tr>
+          <tr>
+            <td>Paths wiped out</td>
+            <td class="n">0%</td><td class="n pickcol">0%</td>
+            <td class="n">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="col" style="margin-top:24px">
+      <p>Stated as one sentence: the rule <strong>roughly doubles the median outcome,
+        gives up about a quarter of the bad-case outcome, and makes a 70% drawdown
+        twelve times more likely.</strong></p>
+      <p>Whether that is a good trade is not a question the data answers — it is the
+        question the data is <em class="q">for</em>. Note which side of it is certain.
+        The financing cost and the deeper drawdowns arrive regardless. The doubled
+        median depends on an expected return that carries a 1.9-point standard error,
+        and a 2-point shortfall would take the better half of the gain with it.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>The full ladder</h2>
+    <p class="sub">Three thousand bootstrapped forty-year paths, financing charged per calendar day.</p>
+
+    <div class="scroll">
+      <table>
+        <caption>Outcome distribution by leverage. Growth is a multiple of starting
+          equity over forty years, so every column is independent of account size.</caption>
+        <thead>
+          <tr>
+            <th>Leverage</th>
+            <th class="n">Median CAGR</th>
+            <th class="n">5th pct CAGR</th>
+            <th class="n">Median growth</th>
+            <th class="n">5th pct growth</th>
+            <th class="n">Median drawdown</th>
+            <th class="n">P(drawdown &lt; −70%)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>1.000×</td><td class="n">12.52%</td><td class="n">+6.97%</td><td class="n">112×</td><td class="n">14.8×</td><td class="n">−48%</td><td class="n"><span class="good">3%</span></td></tr>
+          <tr><td>1.250×</td><td class="n">13.62%</td><td class="n">+6.78%</td><td class="n">165×</td><td class="n">13.8×</td><td class="n">−57%</td><td class="n">15%</td></tr>
+          <tr class="pick"><td>1.500×</td><td class="n">14.61%</td><td class="n">+6.09%</td><td class="n">234×</td><td class="n">10.6×</td><td class="n">−67%</td><td class="n"><span class="risk">37%</span></td></tr>
+          <tr><td>1.750×</td><td class="n">15.40%</td><td class="n">+5.38%</td><td class="n">309×</td><td class="n">8.1×</td><td class="n">−74%</td><td class="n"><span class="risk">64%</span></td></tr>
+          <tr><td>2.000×</td><td class="n">15.93%</td><td class="n">+4.24%</td><td class="n">370×</td><td class="n">5.3×</td><td class="n">−80%</td><td class="n"><span class="risk">84%</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <span class="h">The figure that governs the decision</span>
+      <p><strong>37%.</strong> Roughly one chance in three of watching the account fall
+        more than 70% at some point over forty years. At the fifth percentile of paths,
+        the worst moment leaves 36 cents for every dollar deposited. No return figure
+        in the table above survives an investor who sells there.</p>
+    </div>
+
+    <div class="col" style="margin-top:26px">
+      <p>No path in three thousand was wiped out. That is not reassurance — it is a
+        property of rebalancing to a constant target, which cuts the position as equity
+        falls. Ruin needs a single-day gap worse than <code>−1/L</code>, about −67% here,
+        and the worst day in a century of data is −19%. Leverage at this size does not
+        bankrupt an account. It ruins one.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Why there is no third decimal</h2>
+    <p class="sub">The target was asked for three times to three decimal places. This is the answer.</p>
+
+    <div class="col">
+      <p>On a 0.025 grid, maximising CRRA expected utility at risk aversion 1.5 does
+        peak at <strong>1.500×</strong> — that figure is an argmax, not a rounding. But the same
+        computation reports its own noise: the Monte Carlo standard error on expected
+        utility is <strong>24% of the entire utility range</strong> across 1.0× to 2.0×.</p>
+    </div>
+
+    <figure>
+      <div class="chart-box">
+        <svg viewBox="0 0 740 332" role="img" aria-label="Expected utility against leverage, measured in standard errors below the maximum. The curve is nearly flat from 1.25x to 1.725x, all of which lies within one standard error of the maximum at 1.500x. The chosen rebalance band from 1.300x to 1.700x sits inside that region.">
+          <!-- confidence set band -->
+          <rect x="220" y="40" width="296.4" height="240" fill="var(--accent-soft)"></rect>
+          <!-- chosen rebalance band -->
+          <rect x="251.2" y="40" width="249.6" height="240" fill="none" stroke="var(--accent-line)" stroke-width="1" stroke-dasharray="0"></rect>
+          <!-- gridlines -->
+          <g stroke="var(--rule)" stroke-width="1">
+            <line x1="64" y1="40" x2="688" y2="40"></line>
+            <line x1="64" y1="154.3" x2="688" y2="154.3"></line>
+            <line x1="64" y1="211.4" x2="688" y2="211.4"></line>
+          </g>
+          <!-- one-SE threshold -->
+          <line x1="64" y1="97.1" x2="688" y2="97.1" stroke="var(--accent)" stroke-width="1.25" stroke-dasharray="5 4"></line>
+          <!-- axes -->
+          <line x1="64" y1="280" x2="688" y2="280" stroke="var(--rule-2)" stroke-width="1"></line>
+          <!-- y labels -->
+          <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)" text-anchor="end">
+            <text x="52" y="44">0</text>
+            <text x="52" y="101">−1 SE</text>
+            <text x="52" y="158">−2</text>
+            <text x="52" y="215">−3</text>
+            <text x="52" y="272">−4</text>
+          </g>
+          <!-- x labels -->
+          <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)" text-anchor="middle">
+            <text x="64" y="299">1.00×</text>
+            <text x="220" y="299">1.25×</text>
+            <text x="376" y="299">1.50×</text>
+            <text x="532" y="299">1.75×</text>
+            <text x="688" y="299">2.00×</text>
+          </g>
+          <!-- utility curve -->
+          <polyline fill="none" stroke="var(--accent)" stroke-width="2.25" stroke-linejoin="round"
+            points="64,239.8 79.6,227.3 95.2,216.8 110.8,208.8 126.4,201.0 142,181.4 157.6,158.8 173.2,141.3 188.8,126.4 204.4,111.2 220,96.9 235.6,88.0 251.2,77.9 266.8,70.0 282.4,62.7 298,56.5 313.6,51.1 329.2,46.0 344.8,44.4 360.4,42.3 376,40.0 391.6,40.1 407.2,45.0 422.8,47.6 438.4,50.2 454,53.7 469.6,58.4 485.2,66.7 500.8,83.6 516.4,93.1 532,105.4 547.6,113.8 563.2,127.7 578.8,139.8 594.4,163.7 610,180.1 625.6,196.7 641.2,216.1 656.8,236.8 672.4,258.4 688,277.2"></polyline>
+          <!-- argmax marker -->
+          <circle cx="376" cy="40" r="4.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"></circle>
+          <!-- annotations -->
+          <g font-family="Source Sans 3, sans-serif" font-size="12.5" fill="var(--ink-2)">
+            <text x="368" y="27" text-anchor="middle" fill="var(--ink)" font-weight="600">argmax 1.500×</text>
+            <text x="230" y="132" fill="var(--accent)" font-weight="600">1.250× — 1.725× is all within 1 SE</text>
+            <text x="230" y="150">every one of these 20 grid points is</text>
+            <text x="230" y="166">indistinguishable from the maximum</text>
+            <text x="376" y="272" text-anchor="middle" font-size="11.5" fill="var(--ink-3)">outlined: the chosen band (1.300×, 1.700×)</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>Expected utility by leverage, expressed in standard errors below the
+        maximum. Twenty of the forty-one grid points fall inside one standard error;
+        twenty-seven fall inside two, spanning 1.175× to 1.825×.</figcaption>
+    </figure>
+
+    <div class="col" style="margin-top:26px">
+      <p>Three decimals are unavailable, and the first decimal is barely identified.
+        That measurement also settles the band, which two earlier attempts left
+        unresolved — its utility optimum moved from 5.9% to 2.0% purely on which
+        reconstruction of history was used, which is noise, not signal.</p>
+      <p>So the band is set to match the target's confidence set instead, on a
+        principle that needs no fitting: <strong>holding a position to a tighter
+        tolerance than the target is identified to is pure transaction cost.</strong>
+        A ±2% band trades 560 times in forty years against 19, and buys 0.2 points
+        of median CAGR that is itself inside the noise.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>The answer moved four times</h2>
+    <p class="sub">Each revision superseded the last. Three were caught by a check; one by an outside reviewer.</p>
+
+    <div class="revisions">
+      <article class="rev">
+        <span class="no">01</span>
+        <div>
+          <h3>Ranked on a sample with no bear market</h3>
+          <p>SPMO launched in October 2015. Its own record contains no 2008, no 2000–02
+            and no 1929 — the events that decide whether leverage works. Every criterion
+            run on that decade said borrow the maximum the broker allows.</p>
+          <p class="shift">3.0× <span class="arrow">→</span> 1.475×</p>
+        </div>
+      </article>
+      <article class="rev">
+        <span class="no">02</span>
+        <div>
+          <h3>Three biases, all pointing the same way</h3>
+          <p>An in-sample alpha with a t-statistic of 1.16 projected across a century;
+            29% of variance discarded when synthesising history; financing under-charged
+            by 30% through a day-count error. In a backtest the errors are rarely
+            randomly signed.</p>
+          <p class="shift">1.475× <span class="arrow">→</span> 1.0×</p>
+        </div>
+      </article>
+      <article class="rev">
+        <span class="no">03</span>
+        <div>
+          <h3>The holding period was never stated as a choice</h3>
+          <p>Everything had been answered on ten years. The optimum does not move with
+            horizon, but the price of sitting above it collapses: a bad decade at 1.5×
+            loses money, while a bad forty years still compounds above 5%.</p>
+          <p class="shift">1.0× <span class="arrow">→</span> 1.5×</p>
+        </div>
+      </article>
+      <article class="rev">
+        <span class="no">04</span>
+        <div>
+          <h3>An independent review found two more real bugs</h3>
+          <p>A total wipeout was recorded as a flat day, so ruined paths reported no
+            drawdown at all. The drawdown-constrained optimiser returned the largest
+            feasible leverage rather than the growth maximum. Both were confirmed
+            independently; the equivalence test had a coverage hole exactly where the
+            first bug lived.</p>
+          <p class="shift">1.5× <span class="arrow">→</span> 1.500× with a measured confidence set</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <h2>What would overturn it</h2>
+    <p class="sub">In order of how much they move the answer.</p>
+
+    <div class="checks">
+      <div class="check">
+        <h3>A broker-entity surcharge — check this first</h3>
+        <p>IBKR's Australian entity adds 2% to non-AUD borrowing for retail clients and
+          for non-retail natural persons on a Standard Margin Lending Facility, applied
+          to every tier. At 7.13% financing the target falls to roughly 1.2×. Read the
+          rate off a statement, not off the website.</p>
+      </div>
+      <div class="check">
+        <h3>Expected return being lower than estimated</h3>
+        <p>This is the binding uncertainty, not grid precision. A persistent 2 point
+          shortfall moves the best tested leverage to 1.75× on log growth; 4 points moves
+          it to 1.25×. The standard error on the mean return over a century is about
+          1.9 points, so both are ordinary outcomes.</p>
+      </div>
+      <div class="check">
+        <h3>Forward volatility above its historical level</h3>
+        <p>Kelly scales with 1/σ². Long-only momentum ran at 18.9% volatility over the
+          century and 23.5% in the 2020s; at the latter the target collapses toward 1.0×.
+          Volatility is forecastable in a way returns are not, which is why it is worth
+          extrapolating and returns are not.</p>
+      </div>
+      <div class="check">
+        <h3>A shorter horizon than forty years</h3>
+        <p>The figure is not transferable to money that might be needed sooner — and
+          "needed sooner" includes being frightened out at a bottom.</p>
+      </div>
+      <div class="check">
+        <h3>Momentum's factor premium not persisting</h3>
+        <p>Zeroing the fund's own alpha still credits about 2.1%/yr of momentum premium.
+          Removing it while keeping the risk takes full Kelly from 2.15× to 1.66×.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Still unresolved</h2>
+    <p class="sub">Named rather than fixed.</p>
+
+    <div class="col">
+      <p><strong>89.6% of the history is not SPMO.</strong> Two reconstructions were built —
+        one from market and momentum factor loadings, one from the measured returns of a
+        real long-only large-cap momentum portfolio since 1926 — and they agree on the
+        target to within 3%. But they correlate at 0.873 and share the same live segment,
+        so they are two constructions, not independent evidence. Neither can say how a
+        momentum-screened S&amp;P 500 fund would have behaved in 1932, and both understate
+        the drawdown: 41–50% through the technology bubble against the published index's
+        58.61%.</p>
+      <p><strong>The ticker was selected because it did well.</strong> Running the identical
+        pipeline across five surviving momentum funds gives targets from 1.0× to 1.5×, so
+        the result is not unique to the winner — but it is not general either, and nothing
+        inside a model corrects for selection at the moment the ticker was chosen.</p>
+      <p><strong>Fitting did not beat a fixed rule out of sample.</strong> Over 2019–2026,
+        fixed leverage beat annually refitted selection on all five funds. That is a
+        reason to operate a fixed rule rather than re-optimise, and equally a reason to
+        doubt that the fitting identifies anything.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>Financing modelled on IBKR Pro USD tiers verified 11 September 2026, accrued on a
+      360-day year over calendar days. History reconstructed from Ken French's daily
+      factors and portfolios; prices from Yahoo Finance; benchmark from the Fed Funds
+      effective rate as a proxy for IBKR's reference rate, which is not identical to it.</p>
+    <p>This is a personal decision record for a public ETF, not investment advice and not
+      a validated optimum. The repository it summarises states — correctly — that it has
+      validated no live leverage target. Every figure here is conditional on the
+      assumptions listed beside it.</p>
+  </footer>
+
+</div>

@@ -29,6 +29,9 @@ expected cost, and the specific things that would invalidate it, in
 [docs/operating-rule.md](docs/operating-rule.md), and pinned by
 `tests/test_operating_rule.py` so the document and the engine cannot drift apart.
 
+A one-page summary of the decision, its cost against holding no margin, and the
+measurement behind it is in [report.html](report.html) — open it in a browser.
+
 That 1.500x is an argmax on a 0.025 grid rather than a rounding, and the band is
 chosen to match the target's confidence set rather than a utility argmax:
 `scripts/confidence_set.py` shows Monte Carlo noise is **24% of the entire utility

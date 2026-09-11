@@ -49,29 +49,38 @@ support the third decimal, and does not firmly support the first.
 | interest tax shield | **zero** (owner does not deduct) |
 | asset-level drag | 30bp/yr (expense ratio plus dividend withholding) |
 | holding period | **40 years** |
-| starting equity | USD 50,000 |
 | opening/rebalance cap | 2.0x |
 | maintenance margin | 25% assumed |
 | contributions/withdrawals | none modelled |
 
-## What it is expected to produce, and to cost
+## Against no margin at all
 
-Forty years, 3,000 paths, on USD 50,000:
+The rule is a ratio, so nothing below depends on the size of the account. Growth is
+a multiple of starting equity over forty years, on 3,000 shared paths.
 
-| | |
-|---|---|
-| median CAGR | 14.61% |
-| 5th-percentile CAGR | +6.09% |
-| median terminal equity | $11.7m |
-| 5th-percentile terminal equity | $532k |
-| paths ruined | 0.00% |
-| **P(drawdown worse than −70%)** | **37%** |
-| worst point held per dollar deposited, 5th pct | 0.36 |
-| rebalances over the period | ~19 (about one every two years) |
+| | no margin (1.000x) | the rule | difference |
+|---|---|---|---|
+| median growth of equity | 112x | **234x** | 2.1x more |
+| 5th-percentile growth | 14.8x | **10.6x** | 28% less |
+| median CAGR | 12.52% | **14.61%** | +2.09 pts |
+| 5th-percentile CAGR | +6.97% | **+6.09%** | −0.88 pts |
+| median worst drawdown | −48% | **−67%** | 19 pts deeper |
+| **P(drawdown worse than −70%)** | **3%** | **37%** | **12x as likely** |
+| financing paid per year | 0 | 2.67% of equity | — |
+| trades over forty years | 0 | ~19 | — |
+| paths wiped out | 0% | 0% | — |
 
-The 37% is the number to look at. Roughly one chance in three of watching the
-account fall more than 70% at some point. No return figure above survives an
-investor who sells there.
+In one sentence: the rule roughly doubles the median outcome, gives up about a
+quarter of the bad-case outcome, and makes a 70% drawdown twelve times more likely.
+
+Note which side of that trade is certain. The financing cost and the deeper
+drawdowns arrive regardless. The doubled median rests on an expected return
+carrying a 1.9-point standard error, and a 2-point shortfall would take the better
+half of the gain with it.
+
+At 1.500x the position is 1.50x equity against a loan of 0.50x equity; a margin call
+arrives after a −55.6% decline and equity reaches zero at −66.7%. Those hold at any
+account size.
 
 ## What would invalidate it
 
