@@ -34,9 +34,11 @@ def test_blended_rate_falls_as_loan_grows():
     assert rates[0] > rates[1] > rates[2]
 
 
-def test_blended_rate_respects_floor():
-    # benchmark of zero would give 0% in the deepest tier; the floor is 0.75%
-    assert blended_margin_rate(100_000_000_000, 0.0) >= 0.0075
+def test_blended_rate_floors_benchmark_before_adding_spread():
+    assert blended_margin_rate(50_000, -.01) == pytest.approx(.015)
+    # Published 0.5% tier is possible: no universal 0.75% total-rate floor.
+    expected = (100_000 * .015 + 900_000 * .01 + 49_000_000 * .0075 + 200_000_000 * .005) / 250_000_000
+    assert blended_margin_rate(250_000_000, 0.) == pytest.approx(expected)
 
 
 def test_unlevered_account_compounds_the_raw_return():
@@ -308,7 +310,7 @@ def test_leverage_drift_formula_inverts_the_simulator():
     for target, bound in [(1.075, 1.129), (1.25, 1.4), (2.0, 3.0)]:
         move = drift_to(target, bound)
         # One day, that cumulative move, and financing switched off entirely --
-        # spread_override is needed because the tiered rate has a 0.75% floor that
+        # spread_override is needed because the normal tiered rate has a spread that
         # would otherwise accrue and shift the result in the sixth decimal.
         out = simulate(
             np.array([move]),

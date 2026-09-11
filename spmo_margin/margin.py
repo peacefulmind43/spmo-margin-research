@@ -26,7 +26,7 @@ IBKR_PRO_USD_TIERS: list[tuple[float, float]] = [
 
 IBKR_LITE_USD_TIERS: list[tuple[float, float]] = [(np.inf, 0.0250)]
 
-MARGIN_RATE_FLOOR = 0.0075  # IBKR charges at least 0.75% on a margin loan
+BENCHMARK_FLOOR = 0.0       # published USD rule floors the benchmark before adding spread
 CREDIT_SPREAD = -0.0050     # idle cash earns roughly benchmark - 0.5%
 CREDIT_THRESHOLD = 10_000.0  # no interest paid on the first $10k of cash
 DAY_COUNT = 360             # IBKR accrues financing on a 360-day year
@@ -59,7 +59,7 @@ def blended_margin_rate(
         amount = min(loan, upper) - lower
         if amount <= 0:
             break
-        cost += amount * max(benchmark + spread, MARGIN_RATE_FLOOR)
+        cost += amount * (max(benchmark, BENCHMARK_FLOOR) + spread)
         lower = upper
     return cost / loan
 

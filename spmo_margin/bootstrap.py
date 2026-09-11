@@ -22,7 +22,7 @@ from .margin import (
     CREDIT_THRESHOLD,
     ACCRUAL_DIVISOR,
     IBKR_PRO_USD_TIERS,
-    MARGIN_RATE_FLOOR,
+    BENCHMARK_FLOOR,
 )
 from .metrics import TRADING_DAYS
 from .inputs import time_input, validate_account
@@ -61,7 +61,7 @@ def _blended_rate_vec(
     lower = 0.0
     for upper, spread in tiers:
         amount = np.clip(np.minimum(loan, upper) - lower, 0.0, None)
-        cost += amount * np.maximum(benchmark + spread, MARGIN_RATE_FLOOR)
+        cost += amount * (np.maximum(benchmark, BENCHMARK_FLOOR) + spread)
         lower = upper
     return np.divide(cost, loan, out=np.zeros_like(loan), where=loan > 0)
 

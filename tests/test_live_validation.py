@@ -14,7 +14,7 @@ from spmo_margin.validation import ValidationConfig, causal_maintenance, select_
 def test_cash_withdrawals_and_changing_requirements_keep_1e9_parity(leverage, schedule, contribution):
     rng = np.random.default_rng(527)
     paths = rng.normal(.0002, .025, (3, 180))
-    rates = rng.uniform(.0, .08, paths.shape)
+    rates = rng.uniform(-.02, .08, paths.shape)
     margin = np.full(paths.shape, .25)
     margin[:, 40:100] = .75
     margin[1, 130:] = 1.
