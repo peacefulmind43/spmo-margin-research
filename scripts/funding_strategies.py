@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Does an account that keeps being funded want more leverage, or less?
 
-The intuitive answer is more: new cash can meet a margin call, so you can afford to
-run hotter. That intuition is wrong under constant-leverage rebalancing, and this
-script is what shows it. Three things get measured:
+This script compares funding assumptions conditional on a return model. Deposits
+arrive after the intraday maintenance check, so an expected future contribution
+cannot prevent an earlier liquidation in this model. Three things get measured:
 
 1. **Contribution level against leverage.** Whether the optimal leverage moves when
    an account is being funded rather than left alone.
@@ -18,6 +18,7 @@ script is what shows it. Three things get measured:
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import numpy as np
@@ -27,12 +28,12 @@ from spmo_margin import bootstrap, data, viz
 from spmo_margin.metrics import TRADING_DAYS
 
 ROOT = Path(__file__).resolve().parents[1]
-RESULTS = ROOT / "results"
+RESULTS = Path(os.environ.get("SPMO_RESULTS_DIR", str(ROOT / "results")))
 FIGURES = RESULTS / "figures"
 
 EQUITY0 = 100_000.0
 LEVERAGES = [1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0]
-# annual contributions as a fraction of starting equity, so the study is scale-free
+# Contributions are relative to initial equity; tiered financing is NOT scale-free.
 CONTRIBUTION_RATES = [0.0, 0.2, 0.5, 0.8]
 BENCHMARK = 0.0363
 HORIZON_YEARS = 10
@@ -42,7 +43,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--paths", type=int, default=3000)
     args = ap.parse_args()
-    RESULTS.mkdir(exist_ok=True)
+    RESULTS.mkdir(parents=True, exist_ok=True)
     FIGURES.mkdir(parents=True, exist_ok=True)
 
     extended, _ = data.extend_with_factors(
@@ -77,7 +78,7 @@ def main() -> None:
     # ---- deploying new cash at target leverage vs holding the loan fixed
     strategies = {
         "constant leverage": ("deleverage", "monthly"),
-        "fixed dollar loan": ("invest", "never"),
+        "no new borrowing (interest capitalised)": ("invest", "never"),
     }
     rows = []
     for name, (mode, schedule) in strategies.items():
@@ -119,9 +120,9 @@ def main() -> None:
     print((wealth / 1000).round(0).to_string())
     print("\n--- shape, indexed to each row's own unlevered outcome ---")
     print(wealth.div(wealth[1.0], axis=0).round(3).to_string())
-    print("\n--- deploying new cash at target leverage vs a fixed dollar loan ---")
+    print("\n--- target leverage vs no new borrowing (interest still capitalises) ---")
     print(funding.round(3).to_string(index=False))
-    print(f"\nwrote {[str(p.relative_to(ROOT)) for p in figures]}")
+    print(f"\nwrote {[os.path.relpath(p.resolve(), ROOT) for p in figures]}")
 
 
 if __name__ == "__main__":

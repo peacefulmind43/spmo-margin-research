@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Solve for a specific leverage target and rebalance band, to three decimals.
+"""Conditional in-sample leverage and band optimisation, not a live sizing rule.
 
 "Optimal" is not a property of the data, it is a property of an objective. This
 script states two objectives precisely and solves each on the simulated 40-year
@@ -13,9 +13,8 @@ tails, tiered financing, forced liquidation and the path-dependence of rebalanci
 are all priced in.
 
 **Drawdown-constrained growth.** Maximise median CAGR subject to
-``P(max drawdown worse than -70%) <= threshold``. This is the objective that
-actually decided the headline answer, so it is worth stating as a constraint instead
-of applying it by eye.
+``P(max drawdown worse than -70%) <= threshold``. This is a separate declared
+preference and must not silently replace the user's growth objective.
 
 The band is then optimised against the *same* objective, because choosing a target
 on one criterion and a band on another is how you end up with a number nobody can
@@ -23,14 +22,14 @@ defend.
 
     python scripts/optimise_target.py [--paths 3000] [--horizon 40] [--gamma 1.5]
 
-A warning the output repeats: the third decimal is not real. A block bootstrap over
-the parameter estimate puts full Kelly's 90% interval at roughly [1.1x, 3.1x]. The
-precision here describes the objective, not the world.
+Interpolation precision is not estimation precision. This script does not compute
+a confidence interval or correct for ticker selection and repeated research.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import numpy as np
@@ -39,7 +38,7 @@ import pandas as pd
 from spmo_margin import bootstrap, data, optimal
 
 ROOT = Path(__file__).resolve().parents[1]
-RESULTS = ROOT / "results"
+RESULTS = Path(os.environ.get("SPMO_RESULTS_DIR", str(ROOT / "results")))
 
 BENCHMARK = 0.0363
 DRAWDOWN_LIMIT = -0.70
@@ -47,8 +46,10 @@ DRAWDOWN_LIMIT = -0.70
 
 def crra(wealth: np.ndarray, gamma: float) -> float:
     """Expected CRRA utility of terminal wealth, in multiples of starting equity."""
-    if np.any(wealth <= 0):
-        return -np.inf  # gamma > 1 assigns infinite disutility to ruin, correctly
+    if gamma < 0 or not np.isfinite(gamma) or not np.isfinite(wealth).all() or np.any(wealth < 0):
+        raise ValueError("nonnegative finite wealth and risk aversion required")
+    if gamma >= 1 and np.any(wealth == 0):
+        return -np.inf
     if gamma == 1.0:
         return float(np.mean(np.log(wealth)))
     return float(np.mean(wealth ** (1.0 - gamma)) / (1.0 - gamma))
@@ -56,14 +57,7 @@ def crra(wealth: np.ndarray, gamma: float) -> float:
 
 def _refine(grid: np.ndarray, values: np.ndarray) -> float:
     """Parabolic interpolation through the best grid point and its neighbours."""
-    i = int(np.nanargmax(values))
-    if i == 0 or i == len(grid) - 1:
-        return float(grid[i])
-    curvature = values[i - 1] - 2 * values[i] + values[i + 1]
-    if curvature == 0:
-        return float(grid[i])
-    shift = 0.5 * (values[i - 1] - values[i + 1]) / curvature
-    return float(grid[i] + shift * (grid[i + 1] - grid[i]))
+    return optimal._interpolate_argmax(grid, values)
 
 
 def evaluate_grid(
@@ -103,7 +97,7 @@ def main() -> None:
         "uses the real returns of a long-only large-cap momentum portfolio instead",
     )
     args = ap.parse_args()
-    RESULTS.mkdir(exist_ok=True)
+    RESULTS.mkdir(parents=True, exist_ok=True)
 
     if args.history == "measured":
         frame, fit = data.long_only_momentum_history("SPMO")
@@ -183,15 +177,11 @@ def main() -> None:
     print(f"\n--- band swept at the gamma = {args.gamma:g} target of {target:.3f}x ---")
     print(bands.round(4).to_string())
     print(f"\nutility-maximising band: {best_band:.1%}")
+    print(f"\nConditional fitted optimum: {target:.3f}x; fitted band {best_band:.1%}.")
+    print("NOT A LIVE INSTRUCTION: no independent selection-adjusted validation; opening limits are not imposed in this research sweep.")
     print(
-        f"\n  TARGET {target:.3f}x"
-        f"\n  REBALANCE BACK TO {target:.3f}x WHENEVER LEVERAGE LEAVES"
-        f"\n  [{target * (1 - best_band):.3f}x, {target * (1 + best_band):.3f}x]"
-    )
-    print(
-        "\nThe third decimal is not real. A block bootstrap over the parameter"
-        "\nestimate puts full Kelly's 90% interval at roughly [1.1x, 3.1x]; this"
-        "\nprecision describes the objective, not the world. Read the mean_leverage"
+        "\nThe third decimal is not real. This run does not estimate a selection-adjusted"
+        "\nconfidence interval for the optimum. Read the mean_leverage"
         "\ncolumn before preferring a wide band -- a wide band wins by holding less."
     )
 

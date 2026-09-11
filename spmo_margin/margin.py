@@ -1,15 +1,14 @@
 """IBKR-style tiered margin financing and credit interest.
 
 IBKR quotes margin loans as ``benchmark + spread``, where the benchmark tracks the
-Fed Funds Effective Rate and the spread narrows as the debit balance grows. Interest
-is blended across tiers (the first $100k of a loan is always charged at the most
-expensive tier) and accrues on a 360-day year.
+Fed Funds Effective Rate. Interest is blended across tiers and accrues on a
+360-day year. Spreads generally narrow with larger loans, but the highest tier
+has an additional published surcharge unless prearranged with the broker.
 
-The tier *spreads* below are stable across time and across IBKR's regional entities
-for USD borrowing; what moves is the benchmark. That is why the account's home
-jurisdiction matters much less than people expect: a USD loan against a US-listed
-ETF is priced off the USD benchmark whether the account is booked in Australia,
-Hong Kong or the US.
+These are standard direct-client IBKR Pro USD terms checked on 2026-09-11,
+not a historical series of broker contracts. Regional and introducing-broker
+surcharges must be added explicitly. The USD benchmark is not identical to DFF;
+the historical DFF series is a financing proxy.
 """
 
 from __future__ import annotations
@@ -21,8 +20,8 @@ IBKR_PRO_USD_TIERS: list[tuple[float, float]] = [
     (100_000.0, 0.0150),
     (1_000_000.0, 0.0100),
     (50_000_000.0, 0.0075),
-    (200_000_000.0, 0.0050),
-    (np.inf, 0.0030),
+    (250_000_000.0, 0.0050),
+    (np.inf, 0.0150),  # published 0.5% plus 1% highest-tier surcharge
 ]
 
 IBKR_LITE_USD_TIERS: list[tuple[float, float]] = [(np.inf, 0.0250)]
@@ -49,8 +48,8 @@ def blended_margin_rate(
 ) -> float:
     """Annualised rate on a margin loan of ``loan`` dollars.
 
-    The rate *rises* as the loan is paid down, because the cheap upper tiers are
-    repaid first and the expensive first $100k is the last to go.
+    For ordinary retail-sized loans, paying down cheaper upper tiers increases
+    the blended rate. The highest-tier surcharge breaks global monotonicity.
     """
     if loan <= 0:
         return 0.0
@@ -65,12 +64,12 @@ def blended_margin_rate(
     return cost / loan
 
 
-def credit_rate(cash: float, benchmark: float) -> float:
+def credit_rate(cash: float, benchmark: float, nav: float = 100_000.0) -> float:
     """Annualised rate paid on an idle cash balance (only matters for leverage < 1)."""
     if cash <= CREDIT_THRESHOLD:
         return 0.0
     paid = max(benchmark + CREDIT_SPREAD, 0.0)
-    return paid * (cash - CREDIT_THRESHOLD) / cash
+    return paid * (cash - CREDIT_THRESHOLD) / cash * min(max(nav, 0.0) / 100_000, 1.0)
 
 
 def rate_table(

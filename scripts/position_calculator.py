@@ -41,21 +41,29 @@ def describe(
     benchmark: float,
     maintenance: float,
     tax_shield: float = 0.0,
+    surcharge: float = 0.0,
+    max_leverage: float = 2.0,
 ) -> dict[str, float]:
+    import math
+    if not all(math.isfinite(x) for x in [equity, leverage, benchmark, maintenance, tax_shield, surcharge, max_leverage]):
+        raise ValueError("inputs must be finite")
+    if equity <= 0 or leverage < 0 or not 0 < maintenance <= 1 or not 0 <= tax_shield <= 1 or surcharge < 0 or max_leverage < 1:
+        raise ValueError("invalid equity, leverage, maintenance, surcharge or tax shield")
     position = equity * leverage
     loan = position - equity
     rate = blended_margin_rate(loan, benchmark, IBKR_PRO_USD_TIERS) if loan > 0 else 0.0
+    rate += surcharge if loan > 0 else 0.
     effective = rate * (1.0 - tax_shield)
 
     # a full year of accrual, compounded the way the simulator charges it
-    annual_cost = (
-        loan * ((1 + effective / ACCRUAL_DIVISOR) ** TRADING_DAYS_PER_YEAR - 1)
-        if loan > 0
-        else 0.0
-    )
+    debit = max(loan, 0.)
+    for _ in range(TRADING_DAYS_PER_YEAR):
+        r = (blended_margin_rate(debit, benchmark) + surcharge) * (1 - tax_shield)
+        debit += debit * r / ACCRUAL_DIVISOR
+    annual_cost = debit - max(loan, 0.)
 
-    call_at = loan / (position * (1 - maintenance)) - 1 if loan > 0 else float("-inf")
-    wipeout_at = loan / position - 1 if loan > 0 else float("-inf")
+    call_at = (loan / (position * (1 - maintenance)) - 1 if maintenance < 1 else 0.) if loan > 0 else float("-inf")
+    wipeout_at = -1 / leverage if leverage >= 1 else float("-inf")
 
     return {
         "leverage": leverage,
@@ -68,6 +76,7 @@ def describe(
         "call_at": call_at,
         "wipeout_at": wipeout_at,
         "breakeven_return": annual_cost / position if position else 0.0,
+        "opening_feasible": leverage <= max_leverage and (leverage == 0 or 1 / leverage >= maintenance),
     }
 
 
@@ -98,22 +107,7 @@ def print_band(target: float, band: float) -> None:
         f"  upper bound {upper:.3f}x is reached after a cumulative move of {up:+.1%}"
         f"\n  lower bound {lower:.3f}x is reached after a cumulative move of {down:+.1%}"
     )
-    if down > 0.75:
-        print(
-            "\nThe upper bound does all the work here: it delevers you after a"
-            "\nsustained decline, while the lower bound needs a move so large it never"
-            "\nbinds in practice. Leverage is therefore allowed to decay after gains"
-            "\nand the loan is never topped up -- a deliberate asymmetry, and the free"
-            "\nhalf of it."
-        )
-    else:
-        print(
-            "\nBoth bounds bind at this target, so the rule is symmetric in practice:"
-            "\nyou sell down after a decline and borrow more after a rally. The second"
-            "\nhalf is the part to think twice about -- topping the loan up after gains"
-            "\nis what keeps the position at full risk indefinitely, and it is the"
-            "\nmechanism behind every deep drawdown in this repo's tables."
-        )
+    print("These algebraic crossings exclude interest, costs, cashflows and changing requirements.")
 
 
 def main() -> None:
@@ -129,13 +123,13 @@ def main() -> None:
         "--benchmark",
         type=float,
         default=0.0363,
-        help="IBKR USD benchmark, i.e. Fed Funds effective (default 3.63%%)",
+        help="IBKR USD reference benchmark, not exactly DFF (default assumption 3.63%%)",
     )
     ap.add_argument(
         "--maintenance",
         type=float,
         default=0.25,
-        help="maintenance margin fraction; Reg-T is 0.25, portfolio margin nearer 0.15",
+        help="assumed instrument maintenance fraction; verify with IBKR (default 0.25)",
     )
     ap.add_argument(
         "--band",
@@ -149,11 +143,13 @@ def main() -> None:
         default=0.0,
         help="marginal rate at which margin interest is deductible (0 if it is not)",
     )
+    ap.add_argument("--surcharge", type=float, default=0., help="additional annual borrowing spread, if applicable")
+    ap.add_argument("--max-leverage", type=float, default=2., help="assumed opening limit; actual IBKR requirements can be tighter")
     args = ap.parse_args()
 
-    levels = [args.leverage] if args.leverage else list(DEFAULT_LEVERAGES)
+    levels = [args.leverage] if args.leverage is not None else list(DEFAULT_LEVERAGES)
     rows = [
-        describe(args.equity, lev, args.benchmark, args.maintenance, args.tax_shield)
+        describe(args.equity, lev, args.benchmark, args.maintenance, args.tax_shield, args.surcharge, args.max_leverage)
         for lev in levels
     ]
 
@@ -164,7 +160,7 @@ def main() -> None:
     )
     print(
         "\n   lev     position        loan     rate    interest/yr   as % equity"
-        "   margin call at   wiped out at"
+        "   margin call at   wiped out at   opening"
     )
     print("  " + "-" * 96)
     for r in rows:
@@ -174,6 +170,7 @@ def main() -> None:
             f"  {r['leverage']:>5.3f}x  ${r['position']:>9,.0f}  ${r['loan']:>9,.0f}  "
             f"{r['effective_rate']:>6.2%}   ${r['annual_interest']:>9,.0f}   "
             f"{r['interest_pct_of_equity']:>9.2%}   {call:>14}   {gone:>12}"
+            f"   {'feasible*' if r['opening_feasible'] else 'INFEASIBLE'}"
         )
 
     print(
@@ -182,11 +179,12 @@ def main() -> None:
         "\nBoth assume a close-to-close move with no intraday gap and no rebalancing"
         "\non the way down -- a real liquidation is worse on all three counts."
     )
-    if args.leverage:
+    print("* Feasible only under the supplied limits, not a broker approval or recommendation.")
+    if args.leverage is not None and args.leverage > 0:
         print_band(args.leverage, args.band)
     else:
         print(
-            "\nFor context, this repo's conclusion is 1.0x, with half Kelly at 1.075x."
+            "\nNo live leverage recommendation has been validated by this repository."
             "\nPass --leverage to also get the no-trade band for a target."
         )
 
