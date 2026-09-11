@@ -1,0 +1,6 @@
+objective,target
+"CRRA expected utility, gamma = 1",2.105629753283943
+"CRRA expected utility, gamma = 1.25",1.7535491805588734
+"CRRA expected utility, gamma = 1.5",1.4736718855506163
+"CRRA expected utility, gamma = 2",1.11177109210081
+max median CAGR s.t. P(drawdown < -70%) <= 33.3%,1.4629629629629635

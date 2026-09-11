@@ -13,9 +13,14 @@ anything else here.**
 
 | Horizon | Answer |
 |---|---|
-| ~10 years | **1.0x–1.1x** |
-| **30–40 years** | **1.5x** |
+| ~10 years | **1.112x** |
+| **30–40 years** | **1.474x**, rebalanced back whenever leverage leaves **[1.387x, 1.560x]** |
 | any horizon | **stop by 2.0x** |
+
+Those come from `scripts/optimise_target.py`, which states an objective and solves it
+rather than reading a round number off a table — see
+[If you want one number](#if-you-want-one-number). The third decimal is not real and
+the script says so itself; it describes the objective, not the world.
 
 Earlier versions of this README reported a single number on a 10-year horizon. That
 was the wrong default for anyone young, and it was doing more work than all three
@@ -106,66 +111,76 @@ be read as the answer for someone with decades left.
 
 ### If you want one number
 
-**1.5x on a multi-decade horizon.** Three independent criteria land near it: the
-median-versus-5th-percentile trade is still 2.3 : 1 in your favour there and turns
-against you above about 2x; the drawdown crosses one-in-three at that point; and the
-growth-optimal answer is 2.15x, so 1.5x sits comfortably inside it.
+"Optimal" is a property of an objective, not of the data, so the objective has to be
+stated before a number means anything. Two are solved here on the simulated 40-year
+paths — fat tails, tiered financing, forced liquidation and rebalancing
+path-dependence all priced in — on a 0.05 grid refined to 0.005 with parabolic
+interpolation:
 
-The digits after the first are noise. Resampling 104 one-year blocks and
-re-optimising each time puts a 90% interval on full Kelly of **[1.14x, 3.11x]** — a
-century of data does not pin the optimum to within a factor of two, let alone three
-decimals. Treat anyone quoting three decimals, including this repo, with suspicion.
-
-Stating the choice as relative risk aversion is more honest than calling half Kelly
-a convention. With `f* = (mu - r) / (gamma * sigma^2)`:
-
-| Risk aversion | Leverage |
+| Objective | Target |
 |---|---|
-| gamma = 1 (log utility, full Kelly) | 2.150x |
-| **gamma = 1.5** | **1.467x** |
-| gamma = 2 (half Kelly) | 1.075x |
-| gamma = 3 | 0.734x |
+| CRRA expected utility, gamma = 1 (log utility = full Kelly) | 2.106x |
+| CRRA expected utility, gamma = 1.25 | 1.754x |
+| **CRRA expected utility, gamma = 1.5** | **1.474x** |
+| CRRA expected utility, gamma = 2 (half Kelly) | 1.112x |
+| **max median CAGR s.t. P(drawdown < −70%) ≤ 1/3** | **1.463x** |
 
-For a long-horizon investor who is genuinely not risk averse, gamma between 1.5 and 2
-is the defensible range, which is 1.07x to 1.47x. The 40-year table above says the
-same thing from a different direction. **1.5x is where those two arguments meet.**
+**The two bottom-weighted rows agree to within 0.7%.** That convergence is the
+reason to trust 1.474x rather than the precision of any single objective: a utility
+function with a stated risk aversion and a hard drawdown budget are unrelated
+criteria, and they land on the same place. The earlier eyeballed "1.5x" was within
+2% of it.
+
+What the number is **not** is pinned down to three decimals. Resampling 104 one-year
+blocks and re-optimising each time puts a 90% interval on full Kelly of
+**[1.14x, 3.11x]**. A century of data does not locate the optimum to within a factor
+of two. The three decimals describe where the objective peaks on this sample; they
+are not a claim about the world, and the script prints that warning itself.
 
 ### The no-trade band
 
-Leverage moves as `L' = L(1+x) / (1 + Lx)` for a cumulative market move `x`, so how
-fast it drifts depends entirely on where you start:
+**Rebalance back to 1.474x whenever leverage leaves [1.387x, 1.560x]** — a ±5.9%
+band, optimised on the *same* CRRA objective as the target. Choosing a target on one
+criterion and a band on another is how you end up with a pair nobody can defend.
 
-| Cumulative move | from 1.25x | from 1.5x | from 2.0x | from 3.0x |
-|---|---|---|---|---|
-| −10% | 1.286x | 1.588x | 2.250x | 3.857x |
-| −20% | 1.333x | 1.714x | 2.667x | 6.000x |
-| −30% | 1.400x | 1.909x | 3.500x | 21.000x |
-| −50% | 1.667x | 3.000x | wiped out | wiped out |
-
-**Target 1.5x, rebalance only when leverage leaves [1.275x, 1.725x]** — a ±15% band.
-
-Swept over 40-year horizons, that width is where the trade-off flattens out:
-
-| Band | Range | Triggers after | Mean leverage held | 5th pct CAGR | median CAGR | trades / 40y |
+| Band | Range | Mean leverage held | median CAGR | 5th pct CAGR | trades / 40y | utility |
 |---|---|---|---|---|---|---|
-| monthly | — | — | 1.499x | +5.54% | 13.87% | **480** |
-| ±5% | [1.425, 1.575] | −8.7% | 1.49x | +5.53% | 13.77% | 117 |
-| ±10% | [1.350, 1.650] | −15.4% | 1.467x | +5.56% | 13.73% | 31 |
-| **±15%** | **[1.275, 1.725]** | **−20.7%** | **1.435x** | **+5.61%** | **13.68%** | **13** |
-| ±30% | [1.050, 1.950] | −31.6% | 1.248x | +6.16% | 13.05% | 1 |
+| ±2.0% | [1.444, 1.503] | 1.471x | 13.67% | +5.62% | 521 | −0.2289 |
+| ±4.0% | [1.415, 1.533] | 1.466x | 13.67% | +5.58% | 159 | −0.2284 |
+| **±5.9%** | **[1.387, 1.560]** | **1.459x** | **13.66%** | **+5.66%** | **75** | **−0.2277** |
+| ±10% | [1.326, 1.621] | 1.441x | 13.65% | +5.67% | 28 | −0.2284 |
+| ±15% | [1.253, 1.695] | 1.409x | 13.54% | +5.70% | 12 | −0.2297 |
+| ±30% | [1.032, 1.916] | 1.214x | 12.68% | +6.16% | 1 | −0.2392 |
 
-A ±15% band matches monthly rebalancing on every metric while trading **13 times in
-forty years instead of 480**. Anything tighter is pure churn: a ±5% band fires after
-an 8.7% wobble.
+Be honest about what that table shows: **utility is flat from ±2% to ±12.5%**, with
+every value inside −0.2277 to −0.2292. The argmax at ±5.9% is noise inside a plateau.
+What is *not* noise is the trade count, which falls from 521 to 28 across that same
+plateau — so if you want a practical rule rather than an argmax, **±10% is
+indistinguishable on every return measure and trades twenty times less.**
 
 The wider bands look better on the 5th percentile, and it is the same trap as
-everywhere else in this repo — the ±30% band holds a mean leverage of 1.248x, not
-1.5x. It is not a better strategy, it is a lower one. Read the mean-leverage column
+everywhere else in this repo: the ±30% band holds a mean leverage of 1.214x, not
+1.474x. It is not a better strategy, it is a lower one. Read the mean-leverage column
 before believing any row.
 
-`python scripts/position_calculator.py --equity 50000 --leverage 1.5 --band 0.15`
-prints the position, the interest bill, the call distance and this band for any
-account size.
+Why the band can be this tight at all: leverage moves as `L' = L(1+x) / (1 + Lx)`,
+so drift speed depends entirely on where you start.
+
+| Cumulative move | from 1.25x | from 1.474x | from 2.0x | from 3.0x |
+|---|---|---|---|---|
+| −10% | 1.286x | 1.552x | 2.250x | 3.857x |
+| −20% | 1.333x | 1.652x | 2.667x | 6.000x |
+| −30% | 1.400x | 1.789x | 3.500x | 21.000x |
+| −50% | 1.667x | 2.783x | wiped out | wiped out |
+
+The upper bound 1.560x is reached after roughly an 11% decline, which is why a
+±5.9% band still fires 75 times in forty years. At 3x the same band would be
+unmanageable — a 10% fall would breach it immediately and repeatedly.
+
+```
+python scripts/optimise_target.py --gamma 1.5 --horizon 40
+python scripts/position_calculator.py --equity 50000 --leverage 1.474 --band 0.059
+```
 
 ## Why not more
 
@@ -554,9 +569,10 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 python scripts/run_analysis.py          # the main study
 python scripts/overfitting_audit.py     # what each bias was worth -- read this one
+python scripts/optimise_target.py       # solves for the target and band
 python scripts/funding_strategies.py    # contributions and funding strategy
 python scripts/position_calculator.py --equity 50000 --leverage 1.5 --band 0.15
-pytest                                  # 115 tests
+pytest                                  # 116 tests
 ```
 
 Data comes from Yahoo Finance (SPMO, SPY total return), FRED (`DFF`, the Fed Funds
@@ -588,6 +604,7 @@ contributions could push the balance from debit into cash.
 | `spmo_margin/optimal.py` | the several meanings of "optimal" |
 | `spmo_margin/data.py` | prices, Fed Funds, Fama-French factors, history reconstruction |
 | `scripts/overfitting_audit.py` | the bias audit and every sensitivity sweep |
+| `scripts/optimise_target.py` | states an objective and solves for target + band |
 | `scripts/position_calculator.py` | loan, interest bill and margin-call distance |
 | `results/` | every table as CSV, `key_facts.json`, charts |
 

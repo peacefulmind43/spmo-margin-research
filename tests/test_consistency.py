@@ -322,3 +322,35 @@ def test_leverage_drift_formula_inverts_the_simulator():
         )
         reached = out["leverage_path"][0]
         assert reached == pytest.approx(bound, rel=1e-9)
+
+
+def test_crra_utility_and_refinement():
+    """The optimiser's two pieces of new maths, checked against known answers."""
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from optimise_target import _refine, crra
+
+    # gamma = 1 is log utility
+    wealth = np.array([1.0, 2.0, 4.0])
+    assert crra(wealth, 1.0) == pytest.approx(np.mean(np.log(wealth)))
+
+    # ruin is infinitely bad under CRRA, which is the point of using it here
+    assert crra(np.array([1.0, 0.0]), 2.0) == -np.inf
+    assert crra(np.array([1.0, 0.0]), 1.0) == -np.inf
+
+    # more risk aversion must prefer a certain outcome to a fair gamble on it
+    certain = np.array([2.0, 2.0])
+    gamble = np.array([1.0, 3.0])
+    for gamma in (1.0, 1.5, 2.0):
+        assert crra(certain, gamma) > crra(gamble, gamma)
+
+    # parabolic refinement recovers the vertex of an exact parabola
+    grid = np.array([1.0, 2.0, 3.0])
+    peak = 2.25
+    values = -((grid - peak) ** 2)
+    assert _refine(grid, values) == pytest.approx(peak)
+
+    # and falls back to the grid point when the maximum is on the boundary
+    assert _refine(grid, np.array([3.0, 2.0, 1.0])) == pytest.approx(1.0)

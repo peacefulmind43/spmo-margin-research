@@ -96,14 +96,24 @@ def print_band(target: float, band: float) -> None:
     down = drift_to(target, lower)
     print(
         f"  upper bound {upper:.3f}x is reached after a cumulative move of {up:+.1%}"
-        f"\n  lower bound {lower:.3f}x is reached after a cumulative move of {down:+.0%}"
+        f"\n  lower bound {lower:.3f}x is reached after a cumulative move of {down:+.1%}"
     )
-    print(
-        "\nThe upper bound does all the work: it delevers you after a sustained"
-        "\ndecline. The lower bound needs a move so large it never binds in practice,"
-        "\nwhich means leverage is allowed to decay after gains and the loan is never"
-        "\ntopped up. That asymmetry is deliberate."
-    )
+    if down > 0.75:
+        print(
+            "\nThe upper bound does all the work here: it delevers you after a"
+            "\nsustained decline, while the lower bound needs a move so large it never"
+            "\nbinds in practice. Leverage is therefore allowed to decay after gains"
+            "\nand the loan is never topped up -- a deliberate asymmetry, and the free"
+            "\nhalf of it."
+        )
+    else:
+        print(
+            "\nBoth bounds bind at this target, so the rule is symmetric in practice:"
+            "\nyou sell down after a decline and borrow more after a rally. The second"
+            "\nhalf is the part to think twice about -- topping the loan up after gains"
+            "\nis what keeps the position at full risk indefinitely, and it is the"
+            "\nmechanism behind every deep drawdown in this repo's tables."
+        )
 
 
 def main() -> None:
