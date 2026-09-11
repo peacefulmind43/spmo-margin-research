@@ -58,14 +58,14 @@ def _blended_rate_vec(
     lower = 0.0
     for upper, spread in tiers:
         amount = np.clip(np.minimum(loan, upper) - lower, 0.0, None)
-        cost += amount * max(benchmark + spread, MARGIN_RATE_FLOOR)
+        cost += amount * np.maximum(benchmark + spread, MARGIN_RATE_FLOOR)
         lower = upper
     return np.divide(cost, loan, out=np.zeros_like(loan), where=loan > 0)
 
 
 def _credit_rate_vec(cash: np.ndarray, benchmark: float) -> np.ndarray:
     """Vectorised interest paid on idle cash; matches :func:`margin.credit_rate`."""
-    paid = max(benchmark + CREDIT_SPREAD, 0.0)
+    paid = np.maximum(benchmark + CREDIT_SPREAD, 0.0)
     return np.where(
         cash > CREDIT_THRESHOLD, paid * (cash - CREDIT_THRESHOLD) / cash, 0.0
     )
@@ -93,6 +93,10 @@ def simulate_paths(
     performance measurement, so results stay comparable across funding levels.
     """
     n_paths, horizon = paths.shape
+    # A scalar, common time series, or one financing path per return path.
+    benchmark = np.asarray(benchmark, dtype=float)
+    if benchmark.ndim > 2 or (benchmark.ndim == 1 and benchmark.shape != (horizon,)) or (benchmark.ndim == 2 and benchmark.shape != paths.shape):
+        raise ValueError("benchmark must be scalar, horizon-length, or paths-shaped")
     period = REBALANCE_PERIODS.get(rebalance)
     if rebalance not in {"never", "band"} and period is None:
         raise ValueError(f"unsupported rebalance schedule: {rebalance!r}")
@@ -116,11 +120,12 @@ def simulate_paths(
 
     for t in range(horizon):
         opening = equity.copy()
+        bm = benchmark if benchmark.ndim == 0 else (benchmark[t] if benchmark.ndim == 1 else benchmark[:, t])
 
         # 1. financing accrues on yesterday's debit balance
         borrowing = alive & (debit > 0)
         if borrowing.any():
-            rate = _blended_rate_vec(debit[borrowing], benchmark, tiers)
+            rate = _blended_rate_vec(debit[borrowing], bm[borrowing] if bm.ndim else bm, tiers)
             accrual = debit[borrowing] * rate * (1.0 - interest_tax_shield) / ACCRUAL_DIVISOR
             debit[borrowing] += accrual
             interest_paid[borrowing] += accrual
@@ -129,7 +134,7 @@ def simulate_paths(
         lending = alive & (debit < 0)
         if lending.any():
             cash = -debit[lending]
-            debit[lending] -= cash * _credit_rate_vec(cash, benchmark) / ACCRUAL_DIVISOR
+            debit[lending] -= cash * _credit_rate_vec(cash, bm[lending] if bm.ndim else bm) / ACCRUAL_DIVISOR
 
         # 2. the market moves the position, low first then close (see backtest.py)
         close_factor = 1.0 + paths[:, t]

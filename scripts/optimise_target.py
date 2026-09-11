@@ -36,7 +36,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from spmo_margin import bootstrap, data
+from spmo_margin import bootstrap, data, optimal
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
@@ -141,16 +141,7 @@ def main() -> None:
             }
         )
 
-    # drawdown-constrained: the largest leverage inside the probability budget
-    dd = coarse["prob_deep_drawdown"]
-    inside = dd[dd <= args.dd_threshold]
-    if len(inside) and len(inside) < len(dd):
-        last = float(inside.index.max())
-        nxt = float(dd.index[dd.index.get_loc(last) + 1])
-        lo, hi = dd.loc[last], dd.loc[nxt]
-        constrained = last + (args.dd_threshold - lo) * (nxt - last) / (hi - lo)
-    else:
-        constrained = float(dd.index.max() if len(inside) else np.nan)
+    constrained = optimal.constrained_growth_optimal(coarse, args.dd_threshold)
     answers.append(
         {
             "objective": f"max median CAGR s.t. P(drawdown < {DRAWDOWN_LIMIT:.0%}) <= {args.dd_threshold:.1%}",

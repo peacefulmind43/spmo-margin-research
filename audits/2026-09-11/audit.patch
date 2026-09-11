@@ -1,0 +1,179 @@
+diff --git a/scripts/optimise_target.py b/scripts/optimise_target.py
+index 56401d2..92a0dd5 100644
+--- a/scripts/optimise_target.py
++++ b/scripts/optimise_target.py
+@@ -36,7 +36,7 @@ from pathlib import Path
+ import numpy as np
+ import pandas as pd
+ 
+-from spmo_margin import bootstrap, data
++from spmo_margin import bootstrap, data, optimal
+ 
+ ROOT = Path(__file__).resolve().parents[1]
+ RESULTS = ROOT / "results"
+@@ -141,16 +141,7 @@ def main() -> None:
+             }
+         )
+ 
+-    # drawdown-constrained: the largest leverage inside the probability budget
+-    dd = coarse["prob_deep_drawdown"]
+-    inside = dd[dd <= args.dd_threshold]
+-    if len(inside) and len(inside) < len(dd):
+-        last = float(inside.index.max())
+-        nxt = float(dd.index[dd.index.get_loc(last) + 1])
+-        lo, hi = dd.loc[last], dd.loc[nxt]
+-        constrained = last + (args.dd_threshold - lo) * (nxt - last) / (hi - lo)
+-    else:
+-        constrained = float(dd.index.max() if len(inside) else np.nan)
++    constrained = optimal.constrained_growth_optimal(coarse, args.dd_threshold)
+     answers.append(
+         {
+             "objective": f"max median CAGR s.t. P(drawdown < {DRAWDOWN_LIMIT:.0%}) <= {args.dd_threshold:.1%}",
+diff --git a/spmo_margin/bootstrap.py b/spmo_margin/bootstrap.py
+index a64c0d8..b79293c 100644
+--- a/spmo_margin/bootstrap.py
++++ b/spmo_margin/bootstrap.py
+@@ -58,14 +58,14 @@ def _blended_rate_vec(
+     lower = 0.0
+     for upper, spread in tiers:
+         amount = np.clip(np.minimum(loan, upper) - lower, 0.0, None)
+-        cost += amount * max(benchmark + spread, MARGIN_RATE_FLOOR)
++        cost += amount * np.maximum(benchmark + spread, MARGIN_RATE_FLOOR)
+         lower = upper
+     return np.divide(cost, loan, out=np.zeros_like(loan), where=loan > 0)
+ 
+ 
+ def _credit_rate_vec(cash: np.ndarray, benchmark: float) -> np.ndarray:
+     """Vectorised interest paid on idle cash; matches :func:`margin.credit_rate`."""
+-    paid = max(benchmark + CREDIT_SPREAD, 0.0)
++    paid = np.maximum(benchmark + CREDIT_SPREAD, 0.0)
+     return np.where(
+         cash > CREDIT_THRESHOLD, paid * (cash - CREDIT_THRESHOLD) / cash, 0.0
+     )
+@@ -93,6 +93,10 @@ def simulate_paths(
+     performance measurement, so results stay comparable across funding levels.
+     """
+     n_paths, horizon = paths.shape
++    # A scalar, common time series, or one financing path per return path.
++    benchmark = np.asarray(benchmark, dtype=float)
++    if benchmark.ndim > 2 or (benchmark.ndim == 1 and benchmark.shape != (horizon,)) or (benchmark.ndim == 2 and benchmark.shape != paths.shape):
++        raise ValueError("benchmark must be scalar, horizon-length, or paths-shaped")
+     period = REBALANCE_PERIODS.get(rebalance)
+     if rebalance not in {"never", "band"} and period is None:
+         raise ValueError(f"unsupported rebalance schedule: {rebalance!r}")
+@@ -116,11 +120,12 @@ def simulate_paths(
+ 
+     for t in range(horizon):
+         opening = equity.copy()
++        bm = benchmark if benchmark.ndim == 0 else (benchmark[t] if benchmark.ndim == 1 else benchmark[:, t])
+ 
+         # 1. financing accrues on yesterday's debit balance
+         borrowing = alive & (debit > 0)
+         if borrowing.any():
+-            rate = _blended_rate_vec(debit[borrowing], benchmark, tiers)
++            rate = _blended_rate_vec(debit[borrowing], bm[borrowing] if bm.ndim else bm, tiers)
+             accrual = debit[borrowing] * rate * (1.0 - interest_tax_shield) / ACCRUAL_DIVISOR
+             debit[borrowing] += accrual
+             interest_paid[borrowing] += accrual
+@@ -129,7 +134,7 @@ def simulate_paths(
+         lending = alive & (debit < 0)
+         if lending.any():
+             cash = -debit[lending]
+-            debit[lending] -= cash * _credit_rate_vec(cash, benchmark) / ACCRUAL_DIVISOR
++            debit[lending] -= cash * _credit_rate_vec(cash, bm[lending] if bm.ndim else bm) / ACCRUAL_DIVISOR
+ 
+         # 2. the market moves the position, low first then close (see backtest.py)
+         close_factor = 1.0 + paths[:, t]
+diff --git a/spmo_margin/metrics.py b/spmo_margin/metrics.py
+index f89a484..1ee76b0 100644
+--- a/spmo_margin/metrics.py
++++ b/spmo_margin/metrics.py
+@@ -93,6 +93,8 @@ def summarise(
+     rets = np.zeros(len(equity) - 1)
+     valid = alive[:-1] & alive[1:]
+     rets[valid] = (equity[1:][valid] - contributions[valid]) / equity[:-1][valid] - 1.0
++    # Losing all opening equity is a -100% return, not a missing observation.
++    rets[alive[:-1] & ~alive[1:]] = -1.0
+     rets = np.clip(rets, -1.0, None)
+ 
+     growth = float(np.prod(1.0 + rets))
+diff --git a/spmo_margin/optimal.py b/spmo_margin/optimal.py
+index 535c562..99829e8 100644
+--- a/spmo_margin/optimal.py
++++ b/spmo_margin/optimal.py
+@@ -87,6 +87,24 @@ def half_kelly(f_star: float) -> float:
+     return f_star / 2.0
+ 
+ 
++def constrained_growth_optimal(table: pd.DataFrame, threshold: float) -> float:
++    """Maximise piecewise-linear median growth over the feasible leverage set.
++
++    Include boundary crossings, rather than assuming growth increases until the
++    drawdown budget binds. Ties choose the smaller exposure.
++    """
++    table = table.sort_index()
++    x = table.index.to_numpy(float)
++    g = table["median_cagr"].to_numpy(float)
++    d = table["prob_deep_drawdown"].to_numpy(float)
++    candidates = [(x[i], g[i]) for i in range(len(x)) if d[i] <= threshold]
++    for i in range(len(x) - 1):
++        if (d[i] - threshold) * (d[i + 1] - threshold) < 0:
++            w = (threshold - d[i]) / (d[i + 1] - d[i])
++            candidates.append((x[i] + w * (x[i + 1] - x[i]), g[i] + w * (g[i + 1] - g[i])))
++    return float(max(candidates, key=lambda p: (p[1], -p[0]))[0]) if candidates else float("nan")
++
++
+ def summarise_answers(
+     bootstrap_table: pd.DataFrame,
+     kelly_estimates: dict[str, float],
+diff --git a/tests/test_adversarial.py b/tests/test_adversarial.py
+new file mode 100644
+index 0000000..93c02d2
+--- /dev/null
++++ b/tests/test_adversarial.py
+@@ -0,0 +1,45 @@
++import numpy as np
++import pytest
++from spmo_margin.backtest import Account, simulate
++from spmo_margin.bootstrap import simulate_paths
++
++@pytest.mark.parametrize('returns', [[-.4,0], [.05,-.4,0], [0,-.9,.5]])
++@pytest.mark.parametrize('schedule', ['daily','monthly','never','band'])
++@pytest.mark.parametrize('contribution', [0.,1000.])
++def test_ruin_metrics_match_to_one_billionth(returns,schedule,contribution):
++    r=np.array(returns,dtype=float)
++    a=simulate(r,np.full(len(r),.0363),Account(leverage=3.,rebalance=schedule,monthly_contribution=contribution))
++    b=simulate_paths(r[None,:],3.,.0363,rebalance=schedule,monthly_contribution=contribution)
++    assert a['stats']['wiped_out']
++    for key in ['cagr','max_drawdown']:
++        assert a['stats'][key]==pytest.approx(-1.,abs=1e-9)
++        assert a['stats'][key]==pytest.approx(b[key][0],rel=1e-9,abs=1e-9)
++    assert a['equity'][-1]==pytest.approx(b['terminal_equity'][0],abs=1e-9)
++
++@pytest.mark.parametrize('leverage',[.5,1.,1.475,3.])
++@pytest.mark.parametrize('schedule',['daily','monthly','never','band'])
++@pytest.mark.parametrize('contribution',[0.,1000.])
++def test_joint_rate_paths_match_scalar(leverage,schedule,contribution):
++    rng=np.random.default_rng(73)
++    returns=rng.normal(.0003,.02,(3,400))
++    rates=rng.uniform(0.,.12,(3,400))
++    vector=simulate_paths(returns,leverage,rates,rebalance=schedule,monthly_contribution=contribution)
++    for i in range(3):
++        scalar=simulate(returns[i],rates[i],Account(leverage=leverage,rebalance=schedule,monthly_contribution=contribution))
++        for key in ['cagr','max_drawdown','interest_paid','margin_calls','rebalances']:
++            assert vector[key][i]==pytest.approx(scalar['stats'][key],rel=1e-9,abs=1e-9)
++        assert vector['terminal_equity'][i]==pytest.approx(scalar['equity'][-1],rel=1e-9,abs=1e-9)
++
++def test_common_rate_path_and_shape_validation():
++    r=np.full((2,40),.0001);rates=np.linspace(0,.06,40)
++    a=simulate_paths(r,1.5,rates);b=simulate_paths(r,1.5,np.tile(rates,(2,1)))
++    np.testing.assert_allclose(a['terminal_equity'],b['terminal_equity'],rtol=1e-9,atol=1e-9)
++    with pytest.raises(ValueError):simulate_paths(r,1.5,np.ones(39))
++
++def test_constrained_growth_does_not_maximise_leverage():
++    import pandas as pd
++    from spmo_margin.optimal import constrained_growth_optimal
++    t=pd.DataFrame({'median_cagr':[.1,.15,.11],'prob_deep_drawdown':[.1,.4,.8]},index=[1.,2.,3.])
++    assert constrained_growth_optimal(t,1.)==2.
++    assert constrained_growth_optimal(t,.25)==pytest.approx(1.5,abs=1e-9)
++    assert np.isnan(constrained_growth_optimal(t,.05))
