@@ -102,6 +102,14 @@ def main() -> None:
         help="'factors' builds pre-2015 returns from estimated loadings; 'measured' "
         "uses the real returns of a long-only large-cap momentum portfolio instead",
     )
+    ap.add_argument(
+        "--forward-vol",
+        type=float,
+        default=None,
+        help="rescale the return series to this annualised volatility, keeping the "
+        "mean. Use it to ask what a faster-moving world implies: Kelly scales with "
+        "1/sigma^2, so raising vol lowers the answer sharply.",
+    )
     args = ap.parse_args()
     RESULTS.mkdir(exist_ok=True)
 
@@ -116,6 +124,22 @@ def main() -> None:
     else:
         frame, _ = data.extend_with_factors("SPMO")
         print("\nhistory: factors -- pre-2015 returns constructed from loadings")
+    if args.forward_vol is not None:
+        # Scale dispersion around the mean, leaving the mean untouched. Volatility is
+        # forecastable -- it clusters and persists -- while returns are not, so
+        # extrapolating recent vol is defensible where extrapolating recent returns
+        # is the overfitting error this repo already made once.
+        series = frame["ret"]
+        centre = series.mean()
+        realised = float(series.std() * np.sqrt(252))
+        frame = frame.assign(
+            ret=centre + (series - centre) * (args.forward_vol / realised)
+        )
+        print(
+            f"forward vol scenario: rescaled {realised:.2%} -> "
+            f"{args.forward_vol:.2%}, mean held at {centre * 252:.2%}/yr"
+        )
+
     horizon = args.horizon * 252
     paths = bootstrap.moving_block_paths(
         frame["ret"].to_numpy(), args.paths, horizon, seed=11

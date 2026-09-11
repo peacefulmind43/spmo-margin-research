@@ -369,3 +369,22 @@ def test_french_parser_rejects_duplicated_sections():
         index = series.index
         assert index.is_unique, "duplicate dates reached a loaded series"
         assert index.is_monotonic_increasing
+
+
+def test_forward_vol_rescaling_preserves_the_mean():
+    """The vol scenario must move dispersion only.
+
+    Extrapolating recent volatility is defensible because vol clusters and persists.
+    Extrapolating recent returns is not -- that is the error this repo already made
+    once -- so the rescaling has to leave the mean exactly where it was.
+    """
+    rng = np.random.default_rng(5)
+    series = rng.normal(0.0004, 0.011, 4000)
+    centre = series.mean()
+    realised = series.std() * np.sqrt(252)
+    target = 0.24
+    scaled = centre + (series - centre) * (target / realised)
+
+    assert scaled.mean() == pytest.approx(centre, rel=1e-12)
+    assert scaled.std() * np.sqrt(252) == pytest.approx(target, rel=1e-12)
+    assert scaled.std() > series.std()

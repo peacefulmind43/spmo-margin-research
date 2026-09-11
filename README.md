@@ -14,6 +14,7 @@ anything else here.**
 | Horizon | Answer |
 |---|---|
 | ~10 years | **1.112x** |
+| 30–40 years, **if forward vol runs at 2020s levels** | **1.0x–1.1x** |
 | **30–40 years** | **1.475x**, rebalanced back whenever leverage leaves **[1.33x, 1.63x]** |
 | any horizon | **stop by 2.0x** |
 
@@ -296,6 +297,89 @@ attempt here hit it (5,430 overlapping days against SPMO's real 2,715). The fact
 and momentum files were checked and are clean — 26,195 unique dates, no section
 headers — so the t = 1.16 on the constructed alpha stands. The loader now truncates
 at the section header and raises on any duplicate date, with a test guarding it.
+
+## Does a faster-moving world change the answer?
+
+A reasonable worry: SPMO's index reconstitutes only **semi-annually**, and the signal
+is staler than that sounds. The momentum score uses the 12-month price change
+*excluding the most recent month*, measured at a reference date three weeks before the
+trade. For the September 2025 reconstitution the scores came from prices through
+31 July 2025 and were traded on 19 September — already seven weeks old on day one,
+and about **eight months old** by the following March. Average staleness across a
+holding period is roughly five months, and each rebalance replaces 30–40% of the
+portfolio.
+
+If change is accelerating, is that too slow? Two tests, and the honest answer is that
+the concern is real but arrives through a different channel than rebalance frequency.
+
+**Rebalance staleness does not show up as a cost.** French's BIG HiPRIOR bucket is
+reconstituted *daily* — the same strategy with no staleness at all. Regressing live
+SPMO on it over 2015–2026 gives a beta of 0.867 and an intercept of **+5.43%/yr**.
+SPMO, rebalancing twice a year, beat the daily-rebalanced portfolio rather than
+lagging it. (One decade, t = 1.87, and the universes differ — suggestive, not proof.)
+
+**Momentum reversal has not accelerated either.** If the world turned over faster you
+would expect momentum to mean-revert faster. The lag-3 autocorrelation of monthly UMD
+was −0.159 in 1926–75, −0.043 in 1976–2000 and **+0.014** in 2001–26. If anything
+reversal has slowed.
+
+**But volatility has risen sharply, and that is what matters for leverage.**
+
+| Period | Long-only momentum annualised vol |
+|---|---|
+| 1926–2026 | 18.92% |
+| 1990–2026 | 19.32% |
+| 2010–2026 | 19.83% |
+| **2020–2026** | **23.45%** |
+
+The academic factor is worse on both axes: UMD returned +9.74%/yr at 7.35% vol over
+1950–1999, and **+3.55%/yr at 17.09% vol** over 2000–2026. The premium fell by
+two-thirds while volatility more than doubled — a Sharpe ratio of 1.33 down to 0.21.
+
+Kelly scales with `1 / sigma^2`, so **a faster-moving world lowers the answer, it does
+not raise it.** Holding the risk premium at its century value:
+
+Closed form, holding the premium at its century value of 13.89% over a 5.13% borrow:
+
+| Forward vol | Full Kelly | Target at gamma = 1.5 |
+|---|---|---|
+| 19% (century average) | 2.447x | **1.632x** |
+| **23.45% (the 2020s so far)** | 1.543x | **1.029x** |
+| 28% (further acceleration) | 1.117x | 0.745x |
+| 32% (1930s-like) | 0.856x | 0.570x |
+
+Re-running the full path simulation at the 2020s volatility — not the closed form —
+makes it stronger still:
+
+| Objective at 23.45% forward vol | Target |
+|---|---|
+| CRRA expected utility, gamma = 1 | 1.505x |
+| CRRA expected utility, gamma = 1.25 | 1.202x |
+| **CRRA expected utility, gamma = 1.5** | **1.000x** (grid floor) |
+| CRRA expected utility, gamma = 2 | **1.000x** (grid floor) |
+| max median CAGR s.t. P(dd < −70%) ≤ 1/3 | 1.113x |
+
+**At 2020s volatility the answer collapses to unlevered.** The gamma = 1.5 optimum
+hits the floor of the grid, meaning it would go below 1.0x if shorting were on the
+menu. So if you believe the AI era means genuinely faster regime change, the
+implication for this decision is **1.0x–1.1x, not 1.475x** — and the lever is
+position size, not a faster-rebalancing fund.
+
+Reproduce with `python scripts/optimise_target.py --history measured --forward-vol 0.2345`.
+
+**Why the table holds the premium fixed while varying vol.** The 2020s delivered high
+vol *and* high returns (+22.6%/yr at 23.5%), so using recent data for both would
+*raise* Kelly. That asymmetry is deliberate: **volatility is forecastable and returns
+are not.** Vol clusters and persists over months; realised return over a decade is
+mostly noise. Extrapolating recent vol is defensible; extrapolating recent returns is
+precisely the overfitting error this repo already made once and had to reverse.
+
+**One more thing this argument implies.** If the thesis is that AI reshapes the
+economy, note that SPMO's momentum screen has *already* concentrated the fund into the
+winners of that trade. Levering SPMO on an AI view is making the same bet twice — the
+fund is the expression of the thesis, and the loan amplifies it. That is concentration,
+not confirmation, and a regime shift is exactly the event that produces a momentum
+crash: the held winners unwind while the screen is still five months behind.
 
 ## The full history, including the parts SPMO missed
 
@@ -653,7 +737,7 @@ python scripts/overfitting_audit.py     # what each bias was worth -- read this 
 python scripts/optimise_target.py       # solves for the target and band
 python scripts/funding_strategies.py    # contributions and funding strategy
 python scripts/position_calculator.py --equity 50000 --leverage 1.5 --band 0.15
-pytest                                  # 117 tests
+pytest                                  # 118 tests
 ```
 
 Data comes from Yahoo Finance (SPMO, SPY total return), FRED (`DFF`, the Fed Funds
