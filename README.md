@@ -20,6 +20,25 @@ from 2x to 1.5x; 4pp moves it to 1x. These are sensitivities, not estimated bias
 In the 2019–2026 actual ETF slice, fixed 2x beats annual fitted selection on all five
 surviving funds. Neither result supplies a selection-adjusted live recommendation.
 
+## The owner's chosen operating rule
+
+Separately from what this repository has validated — which remains nothing — the
+owner has recorded an operating rule: **target 1.500x, rebalance back to it whenever
+leverage leaves (1.300x, 1.700x)**. It is written up with its conditions, its
+expected cost, and the specific things that would invalidate it, in
+[docs/operating-rule.md](docs/operating-rule.md), and pinned by
+`tests/test_operating_rule.py` so the document and the engine cannot drift apart.
+
+That 1.500x is an argmax on a 0.025 grid rather than a rounding, and the band is
+chosen to match the target's confidence set rather than a utility argmax:
+`scripts/confidence_set.py` shows Monte Carlo noise is **24% of the entire utility
+range** across 1.0x–2.0x, so every leverage from **1.250x to 1.725x** is
+statistically indistinguishable from the maximum. Holding a position to a tighter
+tolerance than the target is identified to is pure transaction cost. A decision
+record is not a validated optimum, and the binding uncertainty is the expected
+return — a 2pp shortfall, well inside its 1.9pp standard error, moves the answer
+more than the whole grid does.
+
 ## Changes for live-use review
 
 - Training truncates raw ETF prices, factors and financing at an explicit `as_of`
