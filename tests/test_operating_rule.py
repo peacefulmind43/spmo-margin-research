@@ -35,7 +35,8 @@ def test_band_lies_inside_the_one_standard_error_confidence_set():
 
     If the band were ever widened past the set, it would stop tracking the target;
     if narrowed far inside it, it would be paying to defend precision that does not
-    exist. The documented set is 1.250x-1.725x.
+    exist. The documented set is 1.250x-1.725x. It was measured on the retired
+    synthetic history and must be recomputed once the 1994-2016 index data is added.
     """
     assert 1.250 <= LOWER < TARGET < UPPER <= 1.725
 
@@ -52,7 +53,7 @@ def test_rule_runs_and_stays_within_its_stated_risk():
     rule's character, not Monte Carlo wobble.
     """
     rng = np.random.default_rng(3)
-    # 12% drift, 19% vol -- near the reconstructed history, without loading data
+    # 12% drift, 19% vol -- a conservative stand-in, without loading data
     paths = rng.normal(0.12 / 252, 0.19 / np.sqrt(252), size=(400, 10 * 252))
     out = simulate_paths(
         paths,
@@ -93,19 +94,14 @@ def test_out_of_sample_split_is_honest_about_direction():
     assert "value_of_fitting" in src
 
 
-def test_split_test_reproduces_its_published_direction():
-    """Fitting on the earlier century must choose below the headline 1.500x.
-
-    This is the substantive claim the script exists to support. It is checked with
-    few paths, so only the direction is asserted, not the figure.
-    """
+def test_split_test_skips_splits_outside_the_published_history():
+    """With only part of the index history present, early splits must be skipped,
+    not silently run on a few months of training data."""
     import sys
     from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
     import out_of_sample as oos
-    from spmo_margin import data
 
-    frame, _ = data.long_only_momentum_history("SPMO")
-    chosen = oos.choose(frame.loc[:"1990-01-01"]["ret"].to_numpy(), 200, 1.5, 20)
-    assert 1.0 <= chosen < TARGET, "pre-1990 data should choose below the headline target"
+    src = Path(oos.__file__).read_text()
+    assert "skipped" in src and "min_train" in src

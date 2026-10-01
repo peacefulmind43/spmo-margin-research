@@ -4,12 +4,24 @@
   "equity": 50000.0,
   "benchmark": 0.0363,
   "monthly_contribution": 0.0,
-  "output": "results/stress",
+  "output": "/Users/zhangshuo/Desktop/spmo-margin-research/results/stress",
   "seed": 907,
   "annual_drag": 0.003,
   "band": 0.1,
   "max_leverage": 2.0,
   "status": "sensitivity_only",
   "live_sizing_approved": false,
-  "assumptions": "Factor reconstruction; stress sizes are not calibrated probabilities. Equal-mean paired rates are rescaled historical blocks, not a policy forecast."
+  "index_history": {
+    "start": "2016-09-01",
+    "end": "2026-09-30",
+    "years": 10.051587301587302,
+    "full_history": false,
+    "backtest_share": 0.0,
+    "missing": [
+      "1994-09-16",
+      "2016-08-31"
+    ],
+    "note": "PRELIMINARY: S&P 500 Momentum Index history currently starts 2016-09-01. The 1994-09-16 to 2016-08-31 portion (incl. 2000-02 and 2008) is still to be added via data/sp500_momentum_tr_full.csv; results will change when it is."
+  },
+  "assumptions": "S&P 500 Momentum Index TR net of SPMO fee (published values only); stress sizes are not calibrated probabilities. Equal-mean paired rates are rescaled historical blocks, not a policy forecast."
 }

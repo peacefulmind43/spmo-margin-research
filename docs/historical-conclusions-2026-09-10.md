@@ -1,6 +1,6 @@
 # Retired conclusions — retained for audit history
 
-All sizing recommendations below have been withdrawn. See the [current README](../README.md). This is a historical snapshot and its tables do not describe the revised engine.
+All sizing recommendations below have been withdrawn. **Their pre-2015 history was synthetic** (Ken French factor loadings and portfolios back to 1926, not SPMO or its index); that data has since been removed and replaced by the published S&P 500 Momentum Index. See the [current README](../README.md). This is a historical snapshot and its tables do not describe the revised engine.
 
 # How much margin is optimal for SPMO?
 

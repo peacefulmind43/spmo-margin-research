@@ -1,26 +1,77 @@
 # SPMO margin: validate the decision before sizing it
 
+> ## ⚠️ Data status: real index data, history still incomplete
+>
+> All return data is now the **published S&P 500 Momentum Index, gross total return
+> (SP500MUT)** — the index SPMO tracks — net of SPMO's 0.13% fee, plus SPMO's own
+> prices. **Nothing is synthesised.** An earlier version built a pre-2015 "history"
+> from Ken French factor loadings back to 1926; that data and every conclusion
+> drawn from it have been removed.
+>
+> S&P DJI calculates the index from **1994-09-16** (back-test before its
+> 2014-11-18 launch), but its public site serves only the last ten years.
+> **The cached series therefore starts 2016-09-01. The 1994-09-16 to 2016-08-31
+> portion will be added** (see [Adding the 1994–2016 history](#adding-the-19942016-history)).
+> Until then every result in `results/` is **preliminary**: the sample contains
+> no 2000–02 or 2008 bear market, and is biased toward leverage. Every script
+> prints this warning while the gap exists.
+
 **No live leverage target has been validated by this repository.** Earlier
-recommendations of 1.0x, 1.475x and approximately 2.0x mixed different objectives,
-financing assumptions and standards of evidence. A conditional fitted optimum
-is not a selection-adjusted position recommendation. Low aversion to volatility
-does not make the estimate of future return more reliable.
-
-This repository now provides chronological selection diagnostics and account
-stress tests. It does not send orders. The previous conclusions are
+recommendations of 1.0x, 1.475x and approximately 2.0x were measured on the
+retired synthetic history, and mixed different objectives, financing assumptions
+and standards of evidence. They are
 [archived and explicitly retired](docs/historical-conclusions-2026-09-10.md).
-The [first adversarial audit](audits/2026-09-11/adversarial-review.md) documents
-earlier bugs and unresolved data problems; its personal sizing judgment is not
-an empirically validated optimum either.
+A conditional fitted optimum is not a selection-adjusted position recommendation.
 
-Read the [new live-use review and failing cases](docs/live-use-review.md) with the
-[execution record](results/review/execution.json). In the stated log-growth stress
-run, a 2pp reduction in expected annual asset return moves the best tested leverage
-from 2x to 1.5x; 4pp moves it to 1x. These are sensitivities, not estimated bias.
-In the 2019–2026 actual ETF slice, fixed 2x beats annual fitted selection on all five
-surviving funds. Neither result supplies a selection-adjusted live recommendation.
+## Preliminary results on 2016–2026 real data
+
+S&P 500 Momentum TR net of fee, 2016-09-01 to 2026-09-30 (10.1 years); financing
+at the current Fed Funds level plus IBKR Pro tier spreads. **Read these as an upper
+bound, not an estimate**: a decade in which momentum returned about 20%/yr with no
+deep bear market is the most flattering sample available for leverage.
+
+| Measure | Value |
+|---|---|
+| arithmetic mean / volatility | 20.5% / 20.9% |
+| full Kelly / half Kelly (empirical) | 3.35x / 1.68x |
+| leverage maximising 5th-pct 10-year CAGR | 1.36x (1.30–1.47x across seeds) |
+| same, if expected return is 2pp lower | 1.00x |
+| CRRA gamma 1.5, 40-year horizon | 2.33x |
+| P(drawdown worse than −70%) over 40y at 1.5x / 2.0x | 9% / 51% |
+
+Two things are already visible. The answer is extremely sensitive to the
+expected return: removing 2pp a year (well inside its standard error on ten years
+of data) takes the downside-robust optimum from 1.40x to no margin
+(`scripts/overfitting_audit.py`, 3.63% benchmark). And the
+bootstrap block length moves the 5th-percentile optimum from 1.36x (5-day blocks) to 1.87x (63-day), which
+means ten years of data cannot pin it down. Both are reasons to wait for the full
+history, not to act on these figures. Sources: `results/key_facts.json`,
+`results/overfitting_audit.csv`, `results/return_haircut_sensitivity.csv`,
+`results/optimal_target.csv`.
+
+Index (net of fee) against SPMO over 2016–2026: correlation 0.97 and a mean gap of
++0.03%/yr. The tracking error of 4.9% comes almost entirely from SPMO's thin
+trading in 2016–17 and the March 2020 dislocation; since 2023 it is about 1%/yr.
+
+## Adding the 1994–2016 history
+
+1. Export daily SP500MUT levels from 1994-09-16 to today. On a Bloomberg terminal
+   (ANU library and finance labs have access): `SP500MUT Index` → `HP`, set the
+   range, export to Excel. LSEG Workspace or FactSet work too, or request it from
+   S&P DJI. It must be **gross total return in USD**, not price return (SP500MUP)
+   or net total return (SP500MUN).
+2. Save as `data/sp500_momentum_tr_full.csv` with two columns: `date,level`.
+3. Run `pytest` and the scripts again. `spmo_margin.data.load_momentum_index`
+   joins the file to the S&P download on daily returns and **refuses** if the
+   overlapping returns disagree, so a wrong series cannot slip in. The warnings
+   disappear once the series reaches back to 1994.
 
 ## The owner's chosen operating rule
+
+> The evidence behind this rule was measured on the retired synthetic history and
+> is **withdrawn pending the 1994–2016 index data**; see the notice in
+> [docs/operating-rule.md](docs/operating-rule.md). The rule stays as a recorded
+> decision, not as a finding.
 
 Separately from what this repository has validated — which remains nothing — the
 owner has recorded an operating rule: **target 1.500x, rebalance back to it whenever
@@ -29,24 +80,18 @@ expected cost, and the specific things that would invalidate it, in
 [docs/operating-rule.md](docs/operating-rule.md), and pinned by
 `tests/test_operating_rule.py` so the document and the engine cannot drift apart.
 
-A one-page summary of the decision, its cost against holding no margin, and the
-measurement behind it is in [report.html](report.html) — open it in a browser.
-
-That 1.500x is an argmax on a 0.025 grid rather than a rounding, and the band is
-chosen to match the target's confidence set rather than a utility argmax:
-`scripts/confidence_set.py` shows Monte Carlo noise is **24% of the entire utility
-range** across 1.0x–2.0x, so every leverage from **1.250x to 1.725x** is
-statistically indistinguishable from the maximum. Holding a position to a tighter
-tolerance than the target is identified to is pure transaction cost. A decision
-record is not a validated optimum, and the binding uncertainty is the expected
-return — a 2pp shortfall, well inside its 1.9pp standard error, moves the answer
-more than the whole grid does.
+A one-page summary of the decision is in [report.html](report.html); it carries
+the same withdrawal notice. Its 1.500x argmax and 1.250x–1.725x confidence set came
+from the synthetic history. On the preliminary 2016–2026 real data,
+`scripts/confidence_set.py` puts the maximum at the 2.0x cap instead. That sample
+has no bear market in it, so it is no reason to change the rule either way.
 
 ## Changes for live-use review
 
-- Training truncates raw ETF prices, factors and financing at an explicit `as_of`
-  date **before** estimating exposures/residuals or reconstructing prior history.
-  Tests corrupt future data and require earlier fits and selections to stay unchanged.
+- Training truncates raw index levels, ETF prices and financing at an explicit
+  `as_of` date **before** computing any return. SPMO trains on the S&P 500
+  Momentum Index (net of fee); peer funds train on their own prices. Tests corrupt
+  future data and require earlier selections to stay unchanged.
 - A chronological runner selects leverage using observations dated through the previous
   December, then evaluates the next year's actual ETF returns. Equity and position
   carry across folds; there is no annual account reset.
@@ -73,6 +118,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 pytest
+python scripts/run_analysis.py
 python scripts/validate_live.py
 python scripts/stress_account.py --equity 50000 --years 10
 python scripts/position_calculator.py --equity 50000 --leverage 1.5 --maintenance 0.50
@@ -82,11 +128,13 @@ These are example inputs, not instructions to trade 1.5x or hold for ten years.
 
 `validate_live.py` defaults to SPMO, MTUM, PDP, QMOM and MMTM, a retrospectively
 chosen universe of survivors. It uses 2019–2026 annual test folds, at least 756
-prior live observations, a **three-year training forecast**, 128 bootstrap paths,
+prior training observations, a **three-year training forecast**, 128 bootstrap paths,
 a fixed `[1, 1.25, 1.5, 1.75, 2]` grid and expected log wealth. The training
 horizon is an explicit forecasting choice, not an inferred investor holding period.
 Training financing defaults to the last known DFF proxy plus standard Pro spreads;
-test financing follows the actual historical DFF proxy.
+test financing follows the actual historical DFF proxy. Until the 1994–2016 index
+data is added, SPMO's 2019 fold has under three years of index history and is
+skipped (`results/validation/skipped_folds.csv`).
 
 Two forecast rules are tested: the fitted growth estimate and a declared
 2-percentage-point downward revision to expected asset return. The latter is a
@@ -153,12 +201,11 @@ effects or interest deductibility. `interest_tax_shield=0` is the default.
    choice. DWAQ, DUDE and LETB appeared in the earlier exploratory audit, but their
    distribution/closure data remain insufficiently verified for this validation
    set. Their omission is a limitation, not a passing check.
-2. **Independent long-run SPMO observations.** Most pre-2015 history is a factor
-   reconstruction. The S&P 500 Momentum Index is a closer methodological proxy,
-   but its pre-launch history is backtested and a validated daily total-return
-   series is still missing here. Two reconstructions agreeing is not independent
-   confirmation. Annual refits do not propagate a calibrated process for future
-   factor loadings or uncertainty about expected return inside each forecast.
+2. **The 1994–2016 index history.** Not yet in the repository (see the data
+   notice above). Even once added, the 1994–2014 part is S&P's back-test: real
+   index arithmetic on historical constituents, but under a methodology designed
+   after momentum was already known to work. Annual refits also do not propagate
+   uncertainty about expected return inside each forecast.
 3. **Untouched observations and household cashflows.** These dates have already
    been inspected. Causally refitted walk-forward diagnostics cannot turn them into
    pristine prospective evidence. Current data vintages can include revisions;
@@ -170,10 +217,11 @@ The question is whether additional borrowing retains an adequate net growth
 advantage after these uncertainties. Choosing a smaller number by eye, or halving
 fitted Kelly, does not answer that question statistically.
 
-## Older experiments
+## Research scripts
 
-These remain conditional research. Files directly under `results/` are historical
-snapshots; new chronological results are under `results/validation/`.
+These are conditional research on the index history, regenerated on the real data.
+Files directly under `results/` come from them; chronological results are under
+`results/validation/`.
 
 ```bash
 SPMO_RESULTS_DIR=results/research python scripts/run_analysis.py
@@ -188,9 +236,13 @@ is a declared policy choice, not a reliably identified optimum.
 
 ## Data and primary references
 
-Cached adjusted ETF prices originate from Yahoo Finance via `yfinance`; factors
-from Ken French; DFF from FRED. Checksums pin run inputs. These are not reconciled
-custody records or historical publication vintages.
+S&P 500 Momentum Index gross total return (SP500MUT) from S&P Dow Jones Indices'
+public index page, cached in `data/sp500_momentum_tr.csv`; adjusted ETF prices
+from Yahoo Finance via `yfinance`; DFF from FRED. Checksums pin run inputs. These
+are not reconciled custody records or historical publication vintages.
+
+- [S&P 500 Momentum Index](https://www.spglobal.com/spdji/en/indices/dividends-factors/sp-500-momentum-index/)
+- [S&P Momentum Indices methodology](https://www.spglobal.com/spdji/en/documents/methodologies/methodology-sp-momentum-indices.pdf) (base dates, back-test disclosure)
 
 - [IBKR rates and tier surcharges](https://www.interactivebrokers.com/en/trading/margin-rates.php)
 - [IBKR benchmark methodology](https://brokerage.ibkr.com/en/pricing/reference-benchmark-rates-int.php)

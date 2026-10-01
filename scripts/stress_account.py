@@ -19,7 +19,10 @@ def main():
     args = ap.parse_args()
     if min(args.paths, args.years, args.equity) <= 0 or args.monthly_contribution < 0:
         ap.error("positive paths/years/equity and nonnegative contribution required")
-    frame, _ = data.extend_with_factors()
+    frame = data.momentum_index_history()
+    status = data.history_status(frame)
+    if "note" in status:
+        print(f"*** {status['note']} ***")
     horizon = args.years * 252
     idx = bootstrap.moving_block_paths(np.arange(len(frame)), args.paths, horizon, seed=907).astype(int)
     paths = frame.ret.to_numpy()[idx]
@@ -64,7 +67,8 @@ def main():
     settings["output"] = str(settings["output"])
     settings.update(seed=907, annual_drag=.003, band=.10, max_leverage=2.,
         status="sensitivity_only", live_sizing_approved=False,
-        assumptions="Factor reconstruction; stress sizes are not calibrated probabilities. Equal-mean paired rates are rescaled historical blocks, not a policy forecast.")
+        index_history=status,
+        assumptions="S&P 500 Momentum Index TR net of SPMO fee (published values only); stress sizes are not calibrated probabilities. Equal-mean paired rates are rescaled historical blocks, not a policy forecast.")
     (args.output / "settings.json").write_text(json.dumps(settings, indent=2) + "\n")
     print(table.round(4).to_string(index=False))
 

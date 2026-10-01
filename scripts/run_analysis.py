@@ -43,26 +43,17 @@ def main() -> None:
     # ------------------------------------------------------------------ data
     live = data.build_dataset("SPMO", refresh=args.refresh)
 
-    # Primary history: real market and momentum factor returns back to 1926, with the
-    # regression intercept set to zero and idiosyncratic risk resampled back in. The
-    # intercept is not projected because it is not significant (t = 1.2); see
-    # scripts/overfitting_audit.py for what believing it would be worth.
-    extended, fit = data.extend_with_factors(
-        "SPMO", include_alpha=False, include_residual=True, refresh=args.refresh
-    )
-    with_alpha, _ = data.extend_with_factors(
-        "SPMO", include_alpha=True, include_residual=True, refresh=args.refresh
-    )
+    # Primary history: the S&P 500 Momentum Index SPMO tracks, gross total return
+    # net of SPMO's 0.13% fee. Published values only; see spmo_margin.data for why
+    # the series currently starts in 2016 and how the 1994-2016 part gets added.
+    history = data.momentum_index_history(refresh=args.refresh)
+    status = data.history_status(history)
 
     bm_now = float(live["bm"].iloc[-1])
     facts["benchmark_rate_now"] = bm_now
-    facts["factor_fit"] = fit
+    facts["index_history"] = status
+    facts["index_vs_spmo"] = data.tracking_vs_etf("SPMO", refresh=args.refresh)
     facts["live_window"] = [str(live.index[0].date()), str(live.index[-1].date())]
-    facts["extended_window"] = [
-        str(extended.index[0].date()),
-        str(extended.index[-1].date()),
-    ]
-    facts["synthetic_share"] = float(extended["is_synthetic"].mean())
     facts["worst_day"] = float(live["ret"].min())
 
     rates = pd.DataFrame(
@@ -75,15 +66,12 @@ def main() -> None:
     live_sweep, _ = backtest.sweep(live, LEVERAGES, rebalance="monthly")
     live_sweep.to_csv(RESULTS / "sweep_spmo_live.csv")
 
-    ext_sweep, ext_curves = backtest.sweep(extended, LEVERAGES, rebalance="monthly")
-    ext_sweep.to_csv(RESULTS / "sweep_spmo_extended.csv")
-
-    alpha_sweep, _ = backtest.sweep(with_alpha, LEVERAGES, rebalance="monthly")
-    alpha_sweep.to_csv(RESULTS / "sweep_spmo_extended_with_alpha.csv")
+    ext_sweep, ext_curves = backtest.sweep(history, LEVERAGES, rebalance="monthly")
+    ext_sweep.to_csv(RESULTS / "sweep_momentum_index.csv")
 
     schedules = []
     for schedule in ("daily", "weekly", "monthly", "quarterly", "band", "never"):
-        table, _ = backtest.sweep(extended, LEVERAGES, rebalance=schedule)
+        table, _ = backtest.sweep(history, LEVERAGES, rebalance=schedule)
         table = table.assign(schedule=schedule).reset_index()
         schedules.append(table)
     schedule_table = pd.concat(schedules, ignore_index=True)
@@ -92,9 +80,12 @@ def main() -> None:
     # Both schedules in every crisis window. The two fail in different regimes and
     # only the real episodes show it: rebalancing to target sells into a decline and
     # so delevers, while a static loan lets leverage ratchet up as equity falls.
-    crisis_rows = []
+    crisis_rows, facts["crises_not_in_sample"] = [], []
     for name, (start, end) in CRISES.items():
-        window = extended.loc[start:end]
+        window = history.loc[start:end]
+        if history.index[0] > pd.Timestamp(start):
+            facts["crises_not_in_sample"].append(name)
+            continue
         for schedule in ("monthly", "never"):
             table, _ = backtest.sweep(window, LEVERAGES, rebalance=schedule)
             crisis_rows.append(
@@ -111,9 +102,8 @@ def main() -> None:
     # --------------------------------------------------------------- Kelly
     kelly_rows, growth_grids = [], {}
     samples = {
-        "SPMO 2015-2026 (live only)": live,
-        "1926-2026, alpha believed": with_alpha,
-        "1926-2026, alpha zeroed": extended,
+        f"SPMO ETF {live.index[0].year}-{live.index[-1].year}": live,
+        f"S&P 500 Momentum TR net of fee {history.index[0].year}-{history.index[-1].year}": history,
     }
     for label, frame in samples.items():
         rets = frame["ret"].to_numpy()
@@ -145,12 +135,12 @@ def main() -> None:
     boot_live.to_csv(RESULTS / "bootstrap_spmo_live.csv")
 
     boot_ext = bootstrap.bootstrap_sweep(
-        extended["ret"].to_numpy(), LEVERAGES, benchmark_level=bm_now, n_paths=args.paths
+        history["ret"].to_numpy(), LEVERAGES, benchmark_level=bm_now, n_paths=args.paths
     )
-    boot_ext.to_csv(RESULTS / "bootstrap_spmo_extended.csv")
+    boot_ext.to_csv(RESULTS / "bootstrap_momentum_index.csv")
 
     boot_stress = bootstrap.bootstrap_sweep(
-        extended["ret"].to_numpy(),
+        history["ret"].to_numpy(),
         LEVERAGES,
         benchmark_level=0.06,  # a 6% benchmark, i.e. 7.5% financing at retail size
         n_paths=args.paths,
@@ -181,7 +171,7 @@ def main() -> None:
     stability = []
     for seed in (20260910, 1, 7, 99, 12345):
         table = bootstrap.bootstrap_sweep(
-            extended["ret"].to_numpy(),
+            history["ret"].to_numpy(),
             LEVERAGES,
             benchmark_level=bm_now,
             n_paths=args.paths,
@@ -211,7 +201,7 @@ def main() -> None:
     horizon_records: dict[tuple[str, float], dict[float, float]] = {}
     for years in (10, 20, 30, 40):
         paths = bootstrap.moving_block_paths(
-            extended["ret"].to_numpy(), args.paths, int(years * 252), seed=11
+            history["ret"].to_numpy(), args.paths, int(years * 252), seed=11
         )
         for lev in LEVERAGES:
             out = bootstrap.simulate_paths(paths, lev, bm_now)
@@ -241,9 +231,14 @@ def main() -> None:
     figures = []
     figures += viz.plot_growth_and_downside(boot_ext, FIGURES / "growth_vs_downside.png")
     figures += viz.plot_equity_curves(
-        extended.index,
+        history.index,
         {lev: ext_curves[lev][1:] for lev in (1.0, 1.5, 2.0, 3.0)},
         FIGURES / "equity_curves.png",
+        subtitle=(
+            f"S&P 500 Momentum TR net of fee, {status['start'][:4]}-{status['end'][:4]}"
+            + ("" if status["full_history"] else " (1994-2016 not yet added)")
+            + "; monthly rebalance"
+        ),
     )
     figures += viz.plot_kelly_curves(growth_grids, FIGURES / "kelly_growth.png")
     figures += viz.plot_horizon_effect(horizon, FIGURES / "horizon_effect.png")
@@ -253,13 +248,19 @@ def main() -> None:
 
     # --------------------------------------------------------------- console
     pd.set_option("display.width", 200, "display.max_columns", 40)
+    if "note" in status:
+        print(f"\n*** {status['note']} ***")
     print(f"\nIBKR USD benchmark (Fed Funds): {bm_now:.2%}")
+    print(f"index history {status['start']} to {status['end']} ({status['years']:.1f}y)")
+    tracking = facts["index_vs_spmo"]
     print(
-        f"SPMO on market+momentum: beta_mkt {fit['beta_market']:.3f}, "
-        f"beta_mom {fit['beta_momentum']:.3f}, alpha {fit['alpha_annual']:.2%}/yr "
-        f"(t = {fit['alpha_t_stat']:.2f}), R2 {fit['r2']:.3f}"
+        f"index (net of fee) vs SPMO: corr {tracking['correlation']:.3f}, "
+        f"mean gap {tracking['index_minus_etf_annual']:+.2%}/yr, "
+        f"tracking error {tracking['tracking_error_annual']:.2%}"
     )
-    print("\n--- bootstrap, extended history ---")
+    if facts["crises_not_in_sample"]:
+        print(f"crises NOT in sample: {', '.join(facts['crises_not_in_sample'])}")
+    print("\n--- bootstrap, S&P 500 Momentum Index history ---")
     print(
         boot_ext[
             [

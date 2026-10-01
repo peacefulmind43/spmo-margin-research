@@ -90,13 +90,6 @@ def main() -> None:
     ap.add_argument("--gamma", type=float, default=1.5, help="relative risk aversion")
     ap.add_argument("--dd-threshold", type=float, default=1 / 3)
     ap.add_argument(
-        "--history",
-        choices=("factors", "measured"),
-        default="factors",
-        help="'factors' builds pre-2015 returns from estimated loadings; 'measured' "
-        "uses the real returns of a long-only large-cap momentum portfolio instead",
-    )
-    ap.add_argument(
         "--forward-vol",
         type=float,
         default=None,
@@ -107,17 +100,11 @@ def main() -> None:
     args = ap.parse_args()
     RESULTS.mkdir(parents=True, exist_ok=True)
 
-    if args.history == "measured":
-        frame, fit = data.long_only_momentum_history("SPMO")
-        print(
-            f"\nhistory: measured -- real long-only large-cap momentum returns."
-            f"\nSPMO vs proxy over {fit['n_obs']} overlapping days: beta "
-            f"{fit['beta_proxy']:.3f}, alpha {fit['alpha_annual']:+.2%}/yr "
-            f"(t = {fit['alpha_t_stat']:.2f}), R2 {fit['r2']:.4f}"
-        )
-    else:
-        frame, _ = data.extend_with_factors("SPMO")
-        print("\nhistory: factors -- pre-2015 returns constructed from loadings")
+    frame = data.momentum_index_history()
+    status = data.history_status(frame)
+    print(f"\nhistory: S&P 500 Momentum Index TR net of fee, {status['start']} to {status['end']}")
+    if "note" in status:
+        print(f"*** {status['note']} ***")
     if args.forward_vol is not None:
         # Scale dispersion around the mean, leaving the mean untouched. Volatility is
         # forecastable -- it clusters and persists -- while returns are not, so

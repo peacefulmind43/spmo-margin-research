@@ -37,10 +37,13 @@ def main():
     for name, table in [("folds", folds), ("training_scores", scores), ("summary", summary),
                         ("skipped_folds", skips), ("equity_curves", curves)]:
         table.to_csv(args.output / f"{name}.csv", index=False)
-    names = ["french_factors.csv", "fed_funds.csv", *[f"px_{t}.csv" for t in config.tickers]]
-    hashes = {name: hashlib.sha256((data.CACHE_DIR / name).read_bytes()).hexdigest() for name in names}
+    names = [f"{data.INDEX_RECENT_FILE}.csv", f"{data.INDEX_FULL_FILE}.csv", "fed_funds.csv",
+             *[f"px_{t}.csv" for t in config.tickers]]
+    hashes = {name: hashlib.sha256((data.CACHE_DIR / name).read_bytes()).hexdigest()
+              for name in names if (data.CACHE_DIR / name).exists()}
+    index_status = data.history_status(data.momentum_index_history())
     report = {"validation_state": "retrospective_diagnostic", "live_sizing_approved": False,
-        "config": asdict(config), "data_sha256": hashes,
+        "config": asdict(config), "data_sha256": hashes, "index_history": index_status,
         "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "source_sha256": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
                           for folder in ["spmo_margin", "scripts"] for p in sorted((ROOT / folder).glob("*.py"))},
@@ -49,7 +52,9 @@ def main():
         "limitations": [
             "Universe chosen retrospectively; closed-fund total returns are not verified or included.",
             "Historical dates have been inspected before; no untouched or prospective holdout is claimed.",
-            "Factor and adjusted-price caches are current vintages; observation-date cutoffs do not model publication delays or revisions.",
+            "SPMO trains on the S&P 500 Momentum Index (net of fee); other funds train on their own prices. Index values before 2014-11-18 are S&P back-test.",
+            "S&P 500 Momentum Index history currently starts 2016-09; the 1994-2016 portion is pending, so early SPMO folds lack training data and are skipped.",
+            "Adjusted-price caches are current vintages; observation-date cutoffs do not model publication delays or revisions.",
             "The 2pp mean revision is a declared sensitivity, not an estimated selection-bias correction.",
             "Historical DFF plus current Pro spreads is a funding proxy, not actual past IBKR contracts.",
             "25%/50% maintenance stress is illustrative; actual instrument/account requirements are unverified.",

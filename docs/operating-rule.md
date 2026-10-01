@@ -6,6 +6,21 @@ nothing here changes that. What follows is the rule the owner has chosen to oper
 written down with the conditions it rests on so that it can be checked later against
 what actually happens.
 
+> **Evidence withdrawn, 2 October 2026.** Every figure in the sections after "The
+> rule" was measured on a *synthetic* pre-2015 history built from Ken French factor
+> loadings, and on a long-only momentum portfolio standing in for SPMO, back to 1926.
+> That history has been removed. The repository now uses only the published S&P 500
+> Momentum Index (SP500MUT), which so far covers **2016-09 to 2026-09**. **The
+> 1994-2016 index history will be added**; the evidence for this rule must be redone
+> on it.
+>
+> For the record, the preliminary real-data run does not reproduce 1.500x: on the
+> 2016-2026 index the same CRRA (gamma 1.5, 40y) objective gives about 2.3x and the
+> confidence-set script puts the maximum at the 2.0x cap. That sample contains no
+> 2000-02 or 2008 bear market and is biased toward leverage, so it is **not** a
+> reason to raise the target either. The rule below stays as the owner's decision
+> until the full history is in.
+
 ## The rule
 
 ```

@@ -8,7 +8,7 @@ each leverage and the set of leverages that cannot be distinguished from the
 maximum.
 
 The answer governs two decisions. It says how many digits of the target are real --
-on 3,000 forty-year paths, not even the first decimal is firmly identified. And it
+on 3,000 forty-year paths the first decimal is barely identified. And it
 sets a floor on the rebalance band: holding a position to a tighter tolerance than
 the target is identified to is pure transaction cost, so the band should be at
 least as wide as the confidence set.
@@ -20,7 +20,10 @@ import numpy as np, pandas as pd
 from spmo_margin import data, bootstrap
 BM, EQ, DRAG, BAND, CAP, YRS, NP = 0.0363, 50_000.0, 0.003, 0.10, 2.0, 40, 3000
 G = 1.5
-f, _ = data.long_only_momentum_history('SPMO')
+f = data.momentum_index_history()
+status = data.history_status(f)
+if 'note' in status:
+    print('*** %s ***\n' % status['note'])
 paths = bootstrap.moving_block_paths(f.ret.to_numpy(), NP, YRS*252, seed=11)
 
 grid = np.round(np.arange(1.00, 2.0001, 0.025), 6)

@@ -46,12 +46,13 @@ def main() -> None:
     RESULTS.mkdir(parents=True, exist_ok=True)
     FIGURES.mkdir(parents=True, exist_ok=True)
 
-    extended, _ = data.extend_with_factors(
-        "SPMO", include_alpha=False, include_residual=True
-    )
+    frame = data.momentum_index_history()
+    status = data.history_status(frame)
+    if "note" in status:
+        print(f"\n*** {status['note']} ***")
     horizon = HORIZON_YEARS * TRADING_DAYS
     paths = bootstrap.moving_block_paths(
-        extended["ret"].to_numpy(), args.paths, horizon, seed=7
+        frame["ret"].to_numpy(), args.paths, horizon, seed=7
     )
 
     # ---- contribution level against leverage, at the median and the 5th percentile

@@ -2,8 +2,12 @@
 
 The universe, grid and rule are declared before this runner inspects test outcomes.
 They were designed after earlier work on the same history; no p-value here can
-undo that history of research. ETF closures and revised factor vintages remain
-separate data-quality requirements.
+undo that history of research. ETF closures remain a separate data-quality
+requirement.
+
+Training data is always a published return record dated before the cutoff: SPMO
+trains on the S&P 500 Momentum Index it tracks (net of its fee), every other fund on
+its own price history. Nothing is reconstructed from factor loadings.
 """
 from dataclasses import dataclass
 import numpy as np
@@ -78,6 +82,18 @@ def causal_maintenance(price, config):
                              config.stress_maintenance, config.maintenance), index=price.index)
 
 
+def training_history(ticker, as_of):
+    """Published returns and funding dated no later than ``as_of``."""
+    if ticker == "SPMO":
+        frame = data.momentum_index_history(as_of=as_of)
+        source = "S&P 500 Momentum Index TR, net of SPMO fee"
+    else:
+        frame = data.build_dataset(ticker).loc[:as_of]
+        source = f"{ticker} adjusted close"
+    return frame[["ret", "bm"]], {"source": source,
+                                  "window": (str(frame.index[0].date()), str(frame.index[-1].date()))}
+
+
 def walk_forward(config):
     folds, scores, skips, curves = [], [], [], []
     for ticker in config.tickers:
@@ -86,18 +102,21 @@ def walk_forward(config):
             raise ValueError(f"invalid prices for {ticker}")
         live = px.pct_change().dropna()
         bm = data.load_benchmark_rate().reindex(live.index, method="ffill")
-        end = min(live.index.max(), data.load_french_factors().index.max())
+        end = live.index.max()
         margin = causal_maintenance(px, config).reindex(live.index)
         states = {}
         for year in range(config.first_test_year, config.last_test_year + 1):
             cutoff = pd.Timestamp(year, 1, 1) - pd.Timedelta(days=1)
             test = live.loc[pd.Timestamp(year, 1, 1):min(pd.Timestamp(year, 12, 31), end)]
-            if len(live.loc[:cutoff]) < config.min_live_days or test.empty:
-                skips.append({"ticker": ticker, "year": year, "reason": "insufficient training or no test observations"})
+            if test.empty:
+                skips.append({"ticker": ticker, "year": year, "reason": "no test observations"})
                 continue
             if bm.reindex(test.index).isna().any():
                 raise ValueError(f"missing historical funding for {ticker} {year}")
-            train, fit = data.extend_with_factors(ticker, as_of=cutoff)
+            train, fit = training_history(ticker, cutoff)
+            if len(train) < config.min_live_days:
+                skips.append({"ticker": ticker, "year": year, "reason": "insufficient training observations"})
+                continue
             assert train.index.max() <= cutoff < test.index.min()
             assert pd.Timestamp(fit["window"][1]) <= cutoff
             # Same nominal training equity for both forecast rules isolates rule
@@ -105,6 +124,7 @@ def walk_forward(config):
             targets, diagnostics = select_targets(train, config, config.equity)
             diagnostics["ticker"], diagnostics["year"] = ticker, year
             diagnostics["fit_end"] = fit["window"][1]
+            diagnostics["train_source"] = fit["source"]
             scores.extend(diagnostics.to_dict("records"))
             targets.update({"fixed_1x": 1., "fixed_1_5x": 1.5, "fixed_2x": 2.})
             for policy, target in targets.items():

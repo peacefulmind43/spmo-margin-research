@@ -1,8 +1,22 @@
-"""Price and interest-rate data, cached to ``data/`` so results are reproducible."""
+"""Price and interest-rate data, cached to ``data/`` so results are reproducible.
+
+Every return series here is a published record. Nothing is constructed from factor
+loadings, regressions or resampled residuals: an earlier version of this module did
+that to stretch SPMO's history back to 1926, and the leverage conclusions it produced
+are retired (see ``docs/historical-conclusions-2026-09-10.md``).
+
+The long history is the **S&P 500 Momentum Index, gross total return** (SP500MUT),
+the index SPMO tracks. S&P DJI calculates it from 1994-09-16; values before the
+2014-11-18 launch are S&P's own back-test under the launch-date methodology. S&P's
+public site serves only the most recent ten years of daily levels, so the cached
+series currently starts in 2016. **The 1994-2016 portion is still to be added**:
+export SP500MUT daily levels (e.g. Bloomberg ``SP500MUT Index HP``) to
+``data/sp500_momentum_tr_full.csv`` with columns ``date,level`` and every loader
+here splices it in automatically, after checking it against the S&P download.
+"""
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import numpy as np
@@ -13,10 +27,31 @@ from .margin import TRADING_DAYS_PER_YEAR
 CACHE_DIR = Path(__file__).resolve().parents[1] / "data"
 FRED_DFF = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFF"
 
-FRENCH_BASE = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp"
-FRENCH_FACTORS = f"{FRENCH_BASE}/F-F_Research_Data_Factors_daily_CSV.zip"
-FRENCH_MOMENTUM = f"{FRENCH_BASE}/F-F_Momentum_Factor_daily_CSV.zip"
-FRENCH_PORTFOLIOS = f"{FRENCH_BASE}/6_Portfolios_ME_Prior_12_2_Daily_CSV.zip"
+# S&P DJI's id for the S&P 500 Momentum Index (USD); returntype T- selects gross
+# total return, published as SP500MUT. Dates from the S&P Momentum Indices
+# methodology, "Base Dates and History Availability".
+SPDJI_INDEX_ID = 92024474
+SPDJI_PAGE = "https://www.spglobal.com/spdji/en/indices/dividends-factors/sp-500-momentum-index/"
+SPDJI_LEVELS = (
+    "https://www.spglobal.com/spdji/en/util/redesign/index-data/"
+    "get-performance-data-for-datawidget-redesign.dot"
+    f"?indexId={SPDJI_INDEX_ID}&getchildindex=true&returntype=T-"
+    "&currencycode=USD&currencyChangeFlag=false&language_id=1"
+)
+INDEX_FIRST_VALUE_DATE = pd.Timestamp("1994-09-16")
+INDEX_LAUNCH_DATE = pd.Timestamp("2014-11-18")
+INDEX_RECENT_FILE = "sp500_momentum_tr"  # S&P DJI public download, rolling ten years
+INDEX_FULL_FILE = "sp500_momentum_tr_full"  # user-supplied, from 1994-09-16
+
+# SPMO's published gross expense ratio. The index is a gross total return, so the
+# fund's fee is the one cost separating the two that is known in advance.
+SPMO_EXPENSE_RATIO = 0.0013
+
+PENDING_HISTORY_NOTE = (
+    "PRELIMINARY: S&P 500 Momentum Index history currently starts {start}. "
+    "The 1994-09-16 to {gap_end} portion (incl. 2000-02 and 2008) is still to be "
+    "added via data/sp500_momentum_tr_full.csv; results will change when it is."
+)
 
 
 def _cache_path(name: str) -> Path:
@@ -73,348 +108,155 @@ def build_dataset(ticker: str = "SPMO", refresh: bool = False) -> pd.DataFrame:
     return df
 
 
-def _read_french_zip(
-    url: str, columns: list[str], stop_at: str | None = None
+def _fetch_spdji_levels() -> pd.Series:
+    """Daily SP500MUT levels from S&P DJI's public index page (about ten years).
+
+    The site rejects plain HTTP clients, so this impersonates a browser's TLS
+    handshake with ``curl_cffi`` -- already installed as a ``yfinance`` dependency.
+    """
+    from curl_cffi import requests
+
+    session = requests.Session(impersonate="chrome")
+    session.get(SPDJI_PAGE, timeout=60)
+    response = session.get(
+        SPDJI_LEVELS,
+        headers={"Referer": SPDJI_PAGE, "X-Requested-With": "XMLHttpRequest"},
+        timeout=120,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    name = payload["indexDetailHolder"]["indexDetail"]["indexName"]
+    if "Momentum" not in name or "Total Return" not in name:
+        raise RuntimeError(f"S&P DJI returned an unexpected series: {name!r}")
+    levels = payload["indexLevelsHolder"]["indexLevels"]
+    series = pd.Series(
+        [float(row["indexValue"]) for row in levels],
+        index=pd.to_datetime([row["formattedEffectiveDate"] for row in levels], format="%d-%b-%Y"),
+        name="level",
+    )
+    return series[~series.index.duplicated(keep="last")].sort_index()
+
+
+def _read_levels(path: Path) -> pd.Series:
+    frame = pd.read_csv(path)
+    frame.columns = [c.strip().lower() for c in frame.columns]
+    if not {"date", "level"} <= set(frame.columns):
+        raise ValueError(f"{path.name} needs columns 'date,level'")
+    series = pd.Series(
+        frame["level"].astype(float).to_numpy(),
+        index=pd.DatetimeIndex(pd.to_datetime(frame["date"])).normalize(),
+        name="level",
+    ).sort_index()
+    if series.index.has_duplicates or not np.isfinite(series).all() or (series <= 0).any():
+        raise ValueError(f"{path.name} has duplicate dates or non-positive levels")
+    return series
+
+
+def _splice(older: pd.Series, newer: pd.Series, label: str) -> pd.Series:
+    """Chain ``older`` into ``newer`` by returns, refusing if the overlap disagrees.
+
+    Splicing on returns rather than levels makes the join independent of base
+    values. Two copies of the same published index should agree to rounding; a
+    larger disagreement means one of them is a different series (price return
+    instead of total return, net instead of gross) and must not be silently mixed.
+    """
+    overlap = older.index.intersection(newer.index)
+    if len(overlap) < 20:
+        raise ValueError(f"{label}: needs at least 20 overlapping days to verify the join")
+    a = older.loc[overlap].pct_change().dropna()
+    b = newer.loc[overlap].pct_change().dropna()
+    gap = (a - b).abs()
+    if gap.quantile(0.99) > 1e-4:
+        raise ValueError(
+            f"{label}: overlapping daily returns disagree (99th pct gap {gap.quantile(0.99):.2e}); "
+            "check it is SP500MUT gross total return in USD"
+        )
+    before = older.loc[: overlap[0]]
+    scaled = before * (newer.loc[overlap[0]] / before.iloc[-1])
+    return pd.concat([scaled.iloc[:-1], newer]).sort_index()
+
+
+def load_momentum_index(refresh: bool = False) -> pd.Series:
+    """Daily levels of the S&P 500 Momentum Index, gross total return (SP500MUT).
+
+    The S&P download only reaches back ten years, so a refresh is merged into the
+    existing cache rather than replacing it -- otherwise each refresh would lose a
+    day of history from the front. If ``data/sp500_momentum_tr_full.csv`` exists it
+    supplies everything before the S&P download.
+    """
+    path = _cache_path(INDEX_RECENT_FILE)
+    cached = _read_levels(path) if path.exists() else None
+    if cached is None or refresh:
+        fresh = _fetch_spdji_levels()
+        cached = fresh if cached is None else _splice(cached, fresh, "S&P DJI refresh")
+        cached.rename_axis("date").to_frame().to_csv(path)
+
+    full_path = _cache_path(INDEX_FULL_FILE)
+    if full_path.exists():
+        cached = _splice(_read_levels(full_path), cached, full_path.name)
+    return cached
+
+
+def momentum_index_history(
+    as_of: str | pd.Timestamp | None = None,
+    expense_ratio: float = SPMO_EXPENSE_RATIO,
+    refresh: bool = False,
 ) -> pd.DataFrame:
-    """Parse one of Ken French's daily zips into decimal returns.
+    """Daily index returns net of SPMO's fee, with the USD benchmark rate alongside.
 
-    ``stop_at`` truncates at a section header. Several of these files contain more
-    than one table -- the portfolio files carry value-weighted returns followed by
-    equal-weighted ones, under identical date stamps -- so a naive parse silently
-    doubles every row. Duplicated rows leave OLS coefficients unchanged while
-    inflating every t-statistic by sqrt(2), which is the kind of error that makes an
-    insignificant alpha look significant.
+    ``is_backtest`` marks days before the index launch, which S&P calculated after
+    the fact. They are real index arithmetic on historical constituents, but the
+    methodology itself was designed knowing how momentum had performed -- a
+    selection effect no data source removes.
+
+    ``as_of`` truncates the raw levels before any return is computed, so nothing
+    dated after it can reach a training sample.
     """
-    import io
-    import urllib.request
-    import zipfile
-
-    with urllib.request.urlopen(url, timeout=120) as response:
-        payload = response.read()
-    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-        raw = archive.read(archive.namelist()[0]).decode("latin-1")
-
-    lines = raw.splitlines()
-    if stop_at is not None:
-        for i, line in enumerate(lines):
-            if stop_at in line:
-                lines = lines[:i]
-                break
-
-    rows = []
-    for line in lines:
-        parts = [p.strip() for p in line.split(",")]
-        if len(parts) == len(columns) + 1 and re.fullmatch(r"\d{8}", parts[0]):
-            rows.append(parts)
-    if len({r[0] for r in rows}) != len(rows):
-        raise ValueError(f"duplicate dates parsed from {url} -- check section headers")
-    frame = pd.DataFrame(rows, columns=["date", *columns])
-    frame["date"] = pd.to_datetime(frame["date"], format="%Y%m%d")
-    frame = frame.set_index("date").astype(float) / 100.0
-    return frame.sort_index()
-
-
-def load_french_factors(refresh: bool = False) -> pd.DataFrame:
-    """Daily market excess return, risk-free rate and the momentum factor since 1926.
-
-    This is the dataset the SPY-beta extension could not provide. Momentum's real
-    tail risk is not market beta -- it is the momentum *crash*, when the losers a
-    momentum book is short rip upward. Those episodes (August 2007, March-May 2009,
-    January 2001, the 1932 and 1939 reversals) are invisible to a market-beta map
-    and are exactly what kills a levered momentum position.
-    """
-    path = _cache_path("french_factors")
-    if path.exists() and not refresh:
-        frame = pd.read_csv(path, index_col=0, parse_dates=True)
-    else:
-        market = _read_french_zip(FRENCH_FACTORS, ["mkt_rf", "smb", "hml", "rf"])
-        momentum = _read_french_zip(FRENCH_MOMENTUM, ["mom"])
-        frame = market[["mkt_rf", "rf"]].join(momentum, how="inner")
-        frame.to_csv(path)
-    frame.index = pd.DatetimeIndex(frame.index).normalize()
+    level = load_momentum_index(refresh=refresh)
+    if as_of is not None:
+        level = level.loc[:as_of]
+    gross = level.pct_change().dropna()
+    fee = (1.0 - expense_ratio) ** (1.0 / TRADING_DAYS_PER_YEAR)
+    frame = pd.DataFrame({"ret": (1.0 + gross) * fee - 1.0})
+    benchmark = load_benchmark_rate(refresh=refresh)
+    frame["bm"] = benchmark.reindex(frame.index, method="ffill").clip(lower=0.0)
+    if frame["bm"].isna().any():
+        raise ValueError("benchmark rate missing for part of the index history")
+    frame["is_backtest"] = frame.index < INDEX_LAUNCH_DATE
     return frame
 
 
-def load_long_only_momentum(refresh: bool = False) -> pd.Series:
-    """Daily total return of large-cap, high-prior-return US stocks since 1926.
-
-    This is Ken French's "BIG HiPRIOR" bucket: the value-weighted return of big
-    stocks in the top third by prior 12-2 month return, rebalanced daily. It is the
-    closest thing to SPMO that has a real hundred-year record -- large cap, momentum
-    screened, long only, value weighted, no leverage.
-
-    It matters that it is long only. The academic momentum factor UMD is
-    winners *minus* losers, and a momentum crash is precisely the event where the
-    losers rip upward: UMD lost 27% in April 2009. A long-only fund holds no shorts,
-    so it merely underperforms in that event rather than being destroyed by it.
-    Proxying SPMO with a loading on UMD therefore models its crash behaviour with an
-    instrument that does not share its structure, however well the regression fits.
-    """
-    path = _cache_path("big_hiprior")
-    if path.exists() and not refresh:
-        frame = pd.read_csv(path, index_col=0, parse_dates=True)
-    else:
-        frame = _read_french_zip(
-            FRENCH_PORTFOLIOS,
-            ["small_lo", "small_mid", "small_hi", "big_lo", "big_mid", "big_hi"],
-            stop_at="Equal Weighted",
-        )
-        frame = frame[["big_hi"]]
-        frame.to_csv(path)
-    series = frame["big_hi"].astype(float)
-    series.index = pd.DatetimeIndex(series.index).normalize()
-    return series.sort_index()
-
-
-def long_only_momentum_history(
-    ticker: str = "SPMO",
-    splice_live: bool = True,
-    refresh: bool = False,
-) -> tuple[pd.DataFrame, dict[str, float]]:
-    """A century of momentum returns that are measured rather than constructed.
-
-    :func:`extend_with_factors` *builds* a pre-2015 history from factor loadings
-    estimated on ten years of data. This does not build anything: it uses the actual
-    daily returns of a real long-only large-cap momentum portfolio, optionally with
-    the live ETF spliced over its own period. No regression, no synthesis, no
-    resampled residuals, and therefore nothing that can be tuned.
-
-    The price is that it is not SPMO. The fit statistics returned say how close the
-    two are over the overlap; SPMO's beta to it is below one and a positive intercept
-    survives, so using this series unadjusted is the conservative reading of both.
-    """
-    proxy = load_long_only_momentum(refresh=refresh)
-    live = load_total_return(ticker, refresh=refresh).pct_change().dropna()
-    factors = load_french_factors(refresh=refresh)
-
-    joined = pd.DataFrame({"live": live}).join(
-        pd.DataFrame({"proxy": proxy}), how="inner"
-    ).join(factors[["rf"]], how="inner").dropna()
-    y = (joined["live"] - joined["rf"]).to_numpy()
-    x = (joined["proxy"] - joined["rf"]).to_numpy()
-    design = np.column_stack([np.ones(len(x)), x])
-    coef, *_ = np.linalg.lstsq(design, y, rcond=None)
-    resid = y - design @ coef
-    dof = len(y) - 2
-    se = np.sqrt(np.diag(float((resid**2).sum()) / dof * np.linalg.inv(design.T @ design)))
-    stats = {
-        "alpha_annual": float(coef[0]) * 252,
-        "alpha_t_stat": float(coef[0] / se[0]),
-        "beta_proxy": float(coef[1]),
-        "r2": 1.0 - float((resid**2).sum()) / float(((y - y.mean()) ** 2).sum()),
-        "n_obs": int(len(y)),
-        "overlap": [str(joined.index[0].date()), str(joined.index[-1].date())],
+def history_status(frame: pd.DataFrame) -> dict[str, object]:
+    """What part of the index's 1994-onward history a frame actually contains."""
+    start, end = frame.index[0], frame.index[-1]
+    complete = start <= INDEX_FIRST_VALUE_DATE + pd.Timedelta(days=7)
+    status: dict[str, object] = {
+        "start": str(start.date()),
+        "end": str(end.date()),
+        "years": float(len(frame) / TRADING_DAYS_PER_YEAR),
+        "full_history": bool(complete),
+        "backtest_share": float(frame["is_backtest"].mean()) if "is_backtest" in frame else 0.0,
     }
-
-    combined = proxy.copy()
-    if splice_live:
-        overlap = combined.index.intersection(live.index)
-        combined.loc[overlap] = live.reindex(overlap)
-
-    frame = pd.DataFrame({"ret": combined.sort_index()})
-    benchmark = load_benchmark_rate(refresh=refresh)
-    frame["bm"] = benchmark.reindex(frame.index).ffill()
-    frame["bm"] = frame["bm"].fillna(
-        factors["rf"].reindex(frame.index) * TRADING_DAYS_PER_YEAR
-    )
-    frame["bm"] = frame["bm"].clip(lower=0.0).bfill()
-    frame["is_synthetic"] = ~frame.index.isin(live.index) if splice_live else True
-    return frame, stats
+    if not complete:
+        gap_end = (start - pd.Timedelta(days=1)).date()
+        status["missing"] = [str(INDEX_FIRST_VALUE_DATE.date()), str(gap_end)]
+        status["note"] = PENDING_HISTORY_NOTE.format(start=status["start"], gap_end=gap_end)
+    return status
 
 
-def fit_factor_model(
-    ticker: str = "SPMO", refresh: bool = False, *, as_of: str | pd.Timestamp | None = None
-) -> tuple[pd.Series, dict[str, float]]:
-    """Regress the ETF's excess return on the market and momentum factors.
+def tracking_vs_etf(ticker: str = "SPMO", refresh: bool = False) -> dict[str, float]:
+    """How closely the fee-adjusted index matches the ETF over their common days.
 
-    The point of the momentum loading is to explain away the "alpha". An ETF that
-    tracks a momentum index should earn the momentum factor premium, and calling that
-    alpha and then projecting it across history is how a backtest flatters leverage.
-    Whatever intercept survives this regression is the part that is genuinely
-    unexplained -- and it should be treated as noise until proven otherwise.
+    A diagnostic, not a fit: nothing estimated here feeds back into the returns.
     """
-    price = load_total_return(ticker, refresh=refresh)
-    factors = load_french_factors(refresh=refresh)
-
-    # Cut raw observations BEFORE fitting or estimating residuals. Cutting a
-    # synthetic series afterwards leaks later ETF exposures into earlier dates.
-    if as_of is not None:
-        price = price.loc[:as_of]
-        factors = factors.loc[:as_of]
-
-    rets = price.pct_change().dropna()
-    joined = pd.DataFrame({"ret": rets}).join(factors, how="inner").dropna()
-    if len(joined) <= 3:
-        raise ValueError("factor fit requires more than three overlapping observations")
-    excess = (joined["ret"] - joined["rf"]).to_numpy()
-
-    design = np.column_stack(
-        [np.ones(len(joined)), joined["mkt_rf"].to_numpy(), joined["mom"].to_numpy()]
-    )
-    coef, *_ = np.linalg.lstsq(design, excess, rcond=None)
-    resid = excess - design @ coef
-    ss_tot = float(((excess - excess.mean()) ** 2).sum())
-
-    # standard error on the intercept, to say whether the alpha is distinguishable
-    dof = len(joined) - design.shape[1]
-    sigma2 = float((resid**2).sum()) / dof
-    cov = sigma2 * np.linalg.inv(design.T @ design)
-    alpha_se = float(np.sqrt(cov[0, 0]))
-
-    stats = {
-        "alpha_daily": float(coef[0]),
-        "alpha_annual": float(coef[0]) * 252,
-        "alpha_se_annual": alpha_se * 252,
-        "alpha_t_stat": float(coef[0]) / alpha_se,
-        "beta_market": float(coef[1]),
-        "beta_momentum": float(coef[2]),
-        "r2": 1.0 - float((resid**2).sum()) / ss_tot,
-        "resid_vol_daily": float(resid.std(ddof=3)),
-        "n_obs": int(len(joined)),
-        "window": [str(joined.index[0].date()), str(joined.index[-1].date())],
-    }
-    return pd.Series(resid, index=joined.index), stats
-
-
-def extend_with_factors(
-    ticker: str = "SPMO",
-    include_alpha: bool = False,
-    include_residual: bool = True,
-    residual_block: int = 21,
-    momentum_premium_haircut: float = 0.0,
-    refresh: bool = False,
-    seed: int = 20260910,
-    as_of: str | pd.Timestamp | None = None,
-) -> tuple[pd.DataFrame, dict[str, float]]:
-    """Synthetic history built from real factor returns back to 1926.
-
-    ``include_alpha`` defaults to **False**: the in-sample intercept is not projected
-    across a century of history. Turn it on only to see how much the conclusion
-    depends on believing it.
-
-    ``include_residual`` resamples the regression residuals so the synthetic series
-    keeps the ETF's idiosyncratic volatility instead of being a smooth factor
-    combination. Without it the tails are understated.
-
-    The residuals are drawn in ``residual_block``-day blocks rather than one day at a
-    time. They are not iid: the autocorrelation of their absolute value is 0.29 at
-    lag 1 and still 0.21 at lag 5, their kurtosis is 11, and 21-day rolling
-    idiosyncratic vol ranges from 2% to 28% annualised. Sampling them independently
-    would smooth all of that away and make a clustered idiosyncratic drawdown look
-    far less likely than it is.
-    """
-    # reuses the bootstrap module's block sampler rather than reimplementing it; the
-    # dependency runs data -> bootstrap only, so there is no import cycle
-    from .bootstrap import moving_block_paths
-
-    resid, stats = fit_factor_model(ticker, refresh=refresh, as_of=as_of)
-    factors = load_french_factors(refresh=refresh)
-    if as_of is not None:
-        factors = factors.loc[:as_of]
-
-    # Zeroing the ETF's own alpha still leaves the momentum factor premium in, worth
-    # about 2.1%/yr here at a 0.32 loading. That premium has a century of evidence
-    # behind it, far more than any single fund's record -- but momentum is also the
-    # most heavily published anomaly there is, and published anomalies decay. The
-    # haircut removes a fraction of the premium while keeping momentum's volatility
-    # and crash risk, which is the pessimistic case worth pricing: you carry the
-    # factor's downside without being paid for it.
-    momentum = factors["mom"] - momentum_premium_haircut * factors["mom"].mean()
-
-    synthetic = (
-        stats["beta_market"] * factors["mkt_rf"]
-        + stats["beta_momentum"] * momentum
-        + factors["rf"]
-    )
-    if include_alpha:
-        synthetic = synthetic + stats["alpha_daily"]
-    live = load_total_return(ticker, refresh=refresh).pct_change().dropna()
-    if as_of is not None:
-        live = live.loc[:as_of]
-    overlap = synthetic.index.intersection(live.index)
-    synthetic_only = synthetic.index.difference(overlap)
-
-    if include_residual:
-        draws = moving_block_paths(
-            resid.to_numpy(),
-            n_paths=1,
-            horizon=len(synthetic_only),
-            block=residual_block,
-            seed=seed,
-        )[0]
-        # OLS residuals are mean-zero by construction, but any single resampled draw
-        # is not: its sample mean is noise worth roughly 1%/yr at this length. Left
-        # in, that noise lands straight in the drift estimate and so in Kelly, which
-        # is drift/variance -- an earlier version of this code shifted mu by 2.3%/yr
-        # on the luck of one draw. Residuals are here to supply idiosyncratic
-        # variance, not drift, so the draw is demeaned. It is demeaned over exactly
-        # the days it is used on, since the live period below overwrites the rest.
-        synthetic.loc[synthetic_only] += draws - draws.mean()
-
-    combined = synthetic.copy()
-    combined.loc[overlap] = live.reindex(overlap)
-
-    frame = pd.DataFrame({"ret": combined.sort_index()})
-    benchmark = load_benchmark_rate(refresh=refresh)
-    if as_of is not None:
-        benchmark = benchmark.loc[:as_of]
-    frame["bm"] = benchmark.reindex(frame.index, method="ffill")
-    # Fed Funds only starts in July 1954; before that fall back to the contemporaneous
-    # T-bill. French's rf is a daily rate over *trading* days that compounds to the
-    # monthly bill rate, so it annualises by 252, not by the 360-day interest basis.
-    # (Checked against known levels: 2024 gives 5.0%, 1981 gives 13.6%.)
-    frame["bm"] = frame["bm"].fillna(
-        factors["rf"].reindex(frame.index) * TRADING_DAYS_PER_YEAR
-    )
-    frame["bm"] = frame["bm"].clip(lower=0.0).bfill()
-    frame["is_synthetic"] = ~frame.index.isin(live.index)
-    return frame, stats
-
-
-def fit_proxy(target: pd.Series, proxy: pd.Series) -> dict[str, float]:
-    """OLS of target daily returns on proxy daily returns over their common window."""
-    a, b = target.align(proxy, join="inner")
-    x = b.to_numpy()
-    y = a.to_numpy()
-    design = np.column_stack([np.ones_like(x), x])
-    coef, *_ = np.linalg.lstsq(design, y, rcond=None)
-    fitted = design @ coef
-    resid = y - fitted
-    ss_tot = float(((y - y.mean()) ** 2).sum())
+    index = momentum_index_history(refresh=refresh)["ret"]
+    etf = load_total_return(ticker, refresh=refresh).pct_change().dropna()
+    a, b = index.align(etf, join="inner")
+    diff = a - b
     return {
-        "alpha_daily": float(coef[0]),
-        "beta": float(coef[1]),
-        "r2": 1.0 - float((resid**2).sum()) / ss_tot,
-        "resid_vol_daily": float(resid.std(ddof=2)),
-        "n_obs": int(len(y)),
+        "window": [str(a.index[0].date()), str(a.index[-1].date())],
+        "n_obs": int(len(a)),
+        "correlation": float(np.corrcoef(a, b)[0, 1]),
+        "index_minus_etf_annual": float(diff.mean() * TRADING_DAYS_PER_YEAR),
+        "tracking_error_annual": float(diff.std(ddof=1) * np.sqrt(TRADING_DAYS_PER_YEAR)),
     }
-
-
-def extend_with_proxy(
-    ticker: str = "SPMO",
-    proxy: str = "SPY",
-    refresh: bool = False,
-) -> tuple[pd.DataFrame, dict[str, float]]:
-    """Synthetic pre-inception history for ``ticker`` mapped from ``proxy`` via beta.
-
-    SPMO launched in October 2015, so its own record contains no 2000-02 and no 2008.
-    Any leverage conclusion drawn from that window alone is drawn from a sample with
-    the two events that actually kill leveraged accounts removed. This maps the ETF
-    onto SPY's 1993-onward total return so those bear markets can be replayed.
-
-    The mapping is deterministic (alpha + beta * proxy) and therefore strips out
-    idiosyncratic risk, so it understates the tails rather than exaggerating them.
-    """
-    tgt = load_total_return(ticker, refresh=refresh).pct_change().dropna()
-    prx = load_total_return(proxy, refresh=refresh).pct_change().dropna()
-    fit = fit_proxy(tgt, prx)
-
-    synth = fit["alpha_daily"] + fit["beta"] * prx
-    combined = synth.copy()
-    combined.loc[tgt.index] = tgt  # use the real ETF wherever it exists
-
-    df = pd.DataFrame({"ret": combined.sort_index()})
-    bm = load_benchmark_rate(refresh=refresh)
-    df["bm"] = bm.reindex(df.index).ffill().bfill()
-    df["is_synthetic"] = ~df.index.isin(tgt.index)
-    return df, fit

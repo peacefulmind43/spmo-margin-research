@@ -1,13 +1,11 @@
 criterion,leverage,basis
-growth-optimal (median CAGR),2.198145979332615,maximises median 10y CAGR across bootstrap paths
-robust-optimal (5th pct CAGR),1.0,maximises the 5th percentile of 10y CAGR
-robust-optimal (25th pct CAGR),1.0,maximises the 25th percentile of 10y CAGR
-full Kelly (SPMO 2015-2026 (live only)),3.292378630372425,growth-optimal under that sample's drift estimate
-half Kelly (SPMO 2015-2026 (live only)),1.6461893151862126,haircut for drift-estimation error
-"full Kelly (1926-2026, alpha believed)",2.920604002802777,growth-optimal under that sample's drift estimate
-"half Kelly (1926-2026, alpha believed)",1.4603020014013885,haircut for drift-estimation error
-"full Kelly (1926-2026, alpha zeroed)",2.131915726066534,growth-optimal under that sample's drift estimate
-"half Kelly (1926-2026, alpha zeroed)",1.065957863033267,haircut for drift-estimation error
+growth-optimal (median CAGR),3.0,maximises median 10y CAGR across bootstrap paths
+robust-optimal (5th pct CAGR),1.3641389975833207,maximises the 5th percentile of 10y CAGR
+robust-optimal (25th pct CAGR),3.0,maximises the 25th percentile of 10y CAGR
+full Kelly (SPMO ETF 2015-2026),3.2358966621360232,growth-optimal under that sample's drift estimate
+half Kelly (SPMO ETF 2015-2026),1.6179483310680116,haircut for drift-estimation error
+full Kelly (S&P 500 Momentum TR net of fee 2016-2026),3.3518679054597835,growth-optimal under that sample's drift estimate
+half Kelly (S&P 500 Momentum TR net of fee 2016-2026),1.6759339527298918,haircut for drift-estimation error
 drawdown budget -25% (median),,largest leverage with median max drawdown inside -25%
-drawdown budget -35% (median),1.0350140053970303,largest leverage with median max drawdown inside -35%
-drawdown budget -50% (median),1.5054132063935453,largest leverage with median max drawdown inside -50%
+drawdown budget -35% (median),1.1863624578499254,largest leverage with median max drawdown inside -35%
+drawdown budget -50% (median),1.7380457508500284,largest leverage with median max drawdown inside -50%

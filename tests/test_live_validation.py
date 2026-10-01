@@ -144,22 +144,18 @@ def test_continuing_an_account_does_not_reset_its_loan_or_leverage():
 def test_future_data_cannot_change_training_fit_or_selected_target(monkeypatch):
     rng = np.random.default_rng(42)
     dates = pd.bdate_range("2008-01-01", periods=3400)
-    f = pd.DataFrame({"mkt_rf": rng.normal(.0002, .01, len(dates)),
-                      "mom": rng.normal(.0001, .005, len(dates)), "rf": .00005}, index=dates)
-    p = pd.Series(100 * np.cumprod(1 + .9 * f.mkt_rf.iloc[800:] + .3 * f.mom.iloc[800:]
-                                 + rng.normal(0, .003, len(dates) - 800)))
+    level = pd.Series(100 * np.cumprod(1 + rng.normal(.0004, .012, len(dates))), index=dates)
     b = pd.Series(.03, index=dates)
-    monkeypatch.setattr(data, "load_total_return", lambda *a, **k: p)
-    monkeypatch.setattr(data, "load_french_factors", lambda *a, **k: f)
+    monkeypatch.setattr(data, "load_momentum_index", lambda *a, **k: level)
     monkeypatch.setattr(data, "load_benchmark_rate", lambda *a, **k: b)
+    from spmo_margin.validation import training_history
     cutoff = dates[2300]
-    before, fit_before = data.extend_with_factors(as_of=cutoff)
+    before, fit_before = training_history("SPMO", cutoff)
     config = ValidationConfig(paths=4, forecast_years=1, grid=(1., 2.))
     selected_before, _ = select_targets(before, config, 50000.)
-    p.loc[p.index > cutoff] *= 10_000.
-    f.loc[f.index > cutoff, ["mkt_rf", "mom"]] = .5
+    level.loc[level.index > cutoff] *= 10_000.
     b.loc[b.index > cutoff] = .99
-    after, fit_after = data.extend_with_factors(as_of=cutoff)
+    after, fit_after = training_history("SPMO", cutoff)
     pd.testing.assert_frame_equal(before, after, check_exact=True)
     assert fit_before == fit_after
     assert after.index.max() <= cutoff
@@ -179,13 +175,12 @@ def test_walk_forward_counts_spending_failures_in_years_after_ruin(monkeypatch):
     px = pd.Series([100., 100., 20., 20., 20., 20.], index=dates)
     monkeypatch.setattr(data, "load_total_return", lambda *a, **k: px)
     monkeypatch.setattr(data, "load_benchmark_rate", lambda *a, **k: pd.Series(0., index=dates))
-    monkeypatch.setattr(data, "load_french_factors", lambda *a, **k: pd.DataFrame(index=dates))
 
-    def training(*args, as_of=None):
+    def training(ticker, as_of):
         return pd.DataFrame({"ret": 0., "bm": 0.}, index=dates[dates <= as_of]), {
-            "window": ("2018-11-01", str(as_of.date()))}
+            "source": "test", "window": ("2018-11-01", str(as_of.date()))}
 
-    monkeypatch.setattr(data, "extend_with_factors", training)
+    monkeypatch.setattr(validation, "training_history", training)
     monkeypatch.setattr(validation, "select_targets", lambda *a: ({}, pd.DataFrame()))
     cfg = ValidationConfig(tickers=("SPMO",), first_test_year=2019, last_test_year=2020,
                            min_live_days=1, monthly_withdrawal=10.)

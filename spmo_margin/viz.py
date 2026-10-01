@@ -268,14 +268,16 @@ def plot_equity_curves(
     curves: dict[float, np.ndarray],
     out: Path,
     events: tuple[tuple[str, str, str], ...] = (
-        ("1929-09-01", "1932-07-01", "Depression"),
-        ("1973-01-01", "1974-10-01", "1973-74"),
         ("2000-03-24", "2002-10-09", "dot-com"),
         ("2007-10-09", "2009-03-09", "GFC"),
+        ("2020-02-19", "2020-03-23", "covid"),
+        ("2022-01-03", "2022-10-12", "2022"),
     ),
+    subtitle: str = "S&P 500 Momentum Index TR net of SPMO fee; monthly rebalance",
 ) -> list[Path]:
-    """Log-scale equity curves, with the bear markets marked."""
+    """Log-scale equity curves, with the bear markets inside the sample marked."""
     levels = sorted(curves)
+    events = tuple(e for e in events if pd.Timestamp(e[0]) >= dates[0])
 
     def build(c):
         fig, ax = plt.subplots(figsize=(7.4, 4.9))
@@ -343,7 +345,7 @@ def plot_equity_curves(
                 if beaten
                 else f"Leverage wins the full sample - if you never once sold"
             ),
-            "market + momentum factor returns since 1926, alpha zeroed; monthly rebalance",
+            subtitle,
             c,
         )
         ax.set_axisbelow(True)

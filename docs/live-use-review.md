@@ -1,5 +1,9 @@
 # Live-use review: accounting improved, sizing remains unidentified
 
+> **Note, 2 October 2026:** the training data described here was a factor
+> reconstruction. Training now uses the published S&P 500 Momentum Index for SPMO
+> and each peer fund's own prices; see the README. Figures below are from the old runs.
+
 Reviewed 11 September 2026. Numerical source commit: `30b0c1c0eb72aeb632b4fd38c0535ea5ecbd1018`.
 This report supersedes earlier personal sizing judgments. Assumptions here use
 standard IBKR Pro USD financing with **zero Australian surcharge**. IBKR LLC is

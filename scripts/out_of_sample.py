@@ -11,18 +11,17 @@ seeing the test period and the leverage that turned out best in it.
 **The value of fitting at all.** The gap between the chosen leverage and simply
 holding 1.0x. If this is near zero, the machinery is not earning its keep.
 
-**Whether the answer depends on recent decades.** This is the finding that matters
-most. The repository's headline target is fitted on data through 2026, which
-includes an unusually good stretch for US equities. Refitting without it gives a
-materially lower number, and a reader is entitled to know by how much.
+**Whether the answer depends on recent years.** The repository's fitted targets use
+data through 2026, which includes an unusually good stretch for momentum. A reader
+is entitled to know how much a fit made without it differs.
 
-Scope: this runs on the reconstructed century (see `spmo_margin.data`), so a figure
-like "1.13x from pre-1970 data" is a statement about the reconstruction, not a
-measurement of SPMO, which did not exist. It complements rather than replaces
-`scripts/validate_live.py`, which asks the different question of whether *annual
-refitting* beats a fixed rule on the real ETFs.
+Scope: this runs on the S&P 500 Momentum Index (net of SPMO's fee). Splits that leave
+fewer than ``--min-train`` years before or ``--min-test`` years after are skipped and
+reported, so until the 1994-2016 index history is added only the latest split runs.
+It complements `scripts/validate_live.py`, which asks whether *annual refitting*
+beats a fixed rule on the real ETFs.
 
-    python scripts/out_of_sample.py [--splits 1970 1990] [--paths 1500]
+    python scripts/out_of_sample.py [--splits 2008 2015 2021] [--paths 1500]
 """
 
 from __future__ import annotations
@@ -75,18 +74,27 @@ def realised(window: pd.DataFrame, leverage: float) -> tuple[float, float]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--splits", type=int, nargs="+", default=[1970, 1990])
+    ap.add_argument("--splits", type=int, nargs="+", default=[2008, 2015, 2021])
+    ap.add_argument("--min-train", type=float, default=4.0, help="years before a split")
+    ap.add_argument("--min-test", type=float, default=3.0, help="years after a split")
     ap.add_argument("--paths", type=int, default=1500)
     ap.add_argument("--gamma", type=float, default=1.5)
     ap.add_argument("--train-horizon", type=int, default=20)
     args = ap.parse_args()
     RESULTS.mkdir(exist_ok=True)
 
-    frame, _ = data.long_only_momentum_history("SPMO")
+    frame = data.momentum_index_history()
+    status = data.history_status(frame)
+    if "note" in status:
+        print(f"\n*** {status['note']} ***")
     rows = []
     for year in args.splits:
         cut = f"{year}-01-01"
         train, test = frame.loc[:cut], frame.loc[cut:]
+        if len(train) < args.min_train * 252 or len(test) < args.min_test * 252:
+            print(f"split {year}: skipped, {len(train) / 252:.1f}y before / "
+                  f"{len(test) / 252:.1f}y after in the available history")
+            continue
         chosen = choose(train["ret"].to_numpy(), args.paths, args.gamma, args.train_horizon)
 
         hindsight = max(((lev, realised(test, lev)[0]) for lev in GRID), key=lambda p: p[1])[0]
@@ -127,10 +135,8 @@ def main() -> None:
         print("  value of fitting over 1.0x    %+.2f pts of CAGR" % (r["value_of_fitting"] * 100))
         print()
 
-    print("The figure to carry away is the first line of each block. The repository's")
-    print("headline target is fitted through 2026; refitting without the recent decades")
-    print("gives a materially lower number, and the direction of that gap depends on")
-    print("whether the future resembles the fitted period or the earlier one.")
+    print("The figure to carry away is the first line of each block: what was chosen")
+    print("without seeing the test period, against what hindsight would have picked.")
 
 
 if __name__ == "__main__":

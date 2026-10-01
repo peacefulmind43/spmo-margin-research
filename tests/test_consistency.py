@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from spmo_margin.backtest import Account, simulate
@@ -246,34 +247,6 @@ def test_intraday_dip_creates_the_whipsaw_it_is_meant_to_model():
     assert unlevered["equity"][-1] == pytest.approx(unlevered["equity"][0])
 
 
-def test_synthetic_drift_does_not_depend_on_the_residual_draw():
-    # Residuals supply idiosyncratic variance, not drift. If a draw's sample mean
-    # leaks into the series it leaks into Kelly, which is drift/variance -- an
-    # earlier version of this code moved mu by 2.3%/yr on the luck of one seed.
-    from spmo_margin.data import extend_with_factors
-
-    means, vols = [], []
-    for seed in (20260910, 1, 7, 99):
-        frame, _ = extend_with_factors("SPMO", include_residual=True, seed=seed)
-        means.append(frame["ret"].mean())
-        vols.append(frame["ret"].std())
-
-    assert means == pytest.approx([means[0]] * len(means), rel=1e-12)
-    assert np.std(vols) > 0  # the draw must still change the risk, just not the drift
-
-
-def test_momentum_haircut_removes_premium_but_keeps_the_risk():
-    from spmo_margin.data import extend_with_factors
-
-    full, _ = extend_with_factors("SPMO", momentum_premium_haircut=0.0)
-    stripped, _ = extend_with_factors("SPMO", momentum_premium_haircut=1.0)
-
-    assert stripped["ret"].mean() < full["ret"].mean()
-    # volatility and the left tail must survive the haircut
-    assert stripped["ret"].std() == pytest.approx(full["ret"].std(), rel=0.02)
-    assert stripped["ret"].min() == pytest.approx(full["ret"].min(), abs=0.01)
-
-
 def test_rebalancing_is_not_free():
     # Without a cost on the notional traded, the optimal no-trade band is trivially
     # zero and any band comparison is meaningless.
@@ -358,19 +331,65 @@ def test_crra_utility_and_refinement():
     assert _refine(grid, np.array([3.0, 2.0, 1.0])) == pytest.approx(1.0)
 
 
-def test_french_parser_rejects_duplicated_sections():
-    """The portfolio files hold two tables under the same date stamps.
+def _levels(dates, rets, base=100.0):
+    return pd.Series(base * np.cumprod(1 + np.asarray(rets)), index=dates, name="level")
 
-    Parsing both doubles every row, which leaves OLS coefficients untouched while
-    inflating every t-statistic by sqrt(2) -- exactly the error that turns an
-    insignificant alpha into a significant one. The loader must refuse.
-    """
-    from spmo_margin.data import load_french_factors, load_long_only_momentum
 
-    for series in (load_french_factors(), load_long_only_momentum()):
-        index = series.index
-        assert index.is_unique, "duplicate dates reached a loaded series"
-        assert index.is_monotonic_increasing
+def test_index_history_is_published_returns_net_of_fee_only(monkeypatch):
+    """No synthetic column, no fitted quantity: return = index return less the fee."""
+    from spmo_margin import data
+
+    dates = pd.bdate_range("2016-08-31", periods=600)
+    rets = np.random.default_rng(1).normal(0.0005, 0.012, len(dates))
+    monkeypatch.setattr(data, "load_momentum_index", lambda *a, **k: _levels(dates, rets))
+    monkeypatch.setattr(data, "load_benchmark_rate", lambda *a, **k: pd.Series(0.04, index=dates))
+
+    frame = data.momentum_index_history(expense_ratio=0.0013)
+    assert list(frame.columns) == ["ret", "bm", "is_backtest"]
+    fee = (1 - 0.0013) ** (1 / 252)
+    np.testing.assert_allclose(frame["ret"], (1 + rets[1:]) * fee - 1, rtol=1e-9, atol=1e-14)
+    assert not frame["is_backtest"].any()  # all after the 2014-11-18 launch
+
+    status = data.history_status(frame)
+    assert not status["full_history"]
+    assert status["missing"][0] == "1994-09-16"
+    assert "still to be" in status["note"]
+
+
+def test_index_cutoff_truncates_before_returns(monkeypatch):
+    from spmo_margin import data
+
+    dates = pd.bdate_range("2016-08-31", periods=400)
+    level = _levels(dates, np.full(len(dates), 0.001))
+    monkeypatch.setattr(data, "load_momentum_index", lambda *a, **k: level)
+    monkeypatch.setattr(data, "load_benchmark_rate", lambda *a, **k: pd.Series(0.03, index=dates))
+    cutoff = dates[200]
+    before = data.momentum_index_history(as_of=cutoff)
+    level.loc[level.index > cutoff] *= 50.0
+    after = data.momentum_index_history(as_of=cutoff)
+    pd.testing.assert_frame_equal(before, after, check_exact=True)
+    assert after.index.max() == cutoff
+
+
+def test_full_history_splice_checks_the_overlap():
+    """A user-supplied 1994 file is joined on returns and refused if it disagrees."""
+    from spmo_margin.data import _splice
+
+    dates = pd.bdate_range("1994-09-16", "2026-09-30")
+    rets = np.random.default_rng(2).normal(0.0004, 0.012, len(dates))
+    truth = _levels(dates, rets, base=100.0)
+    recent = truth.loc["2016-08-31":] * 7.3  # different base, same series
+    older = truth.loc[:"2017-06-30"]
+
+    joined = _splice(older, recent, "test")
+    assert joined.index[0] == dates[0] and joined.index.is_unique
+    np.testing.assert_allclose(joined.pct_change().dropna(), truth.pct_change().dropna(), rtol=1e-9)
+
+    price_return = older * np.exp(-np.arange(len(older)) * 0.02 / 252 * 3)  # wrong series
+    with pytest.raises(ValueError, match="disagree"):
+        _splice(price_return, recent, "test")
+    with pytest.raises(ValueError, match="overlapping"):
+        _splice(truth.loc[:"2016-06-30"], recent, "test")
 
 
 def test_forward_vol_rescaling_preserves_the_mean():
