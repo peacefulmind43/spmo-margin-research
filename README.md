@@ -53,44 +53,6 @@ Index (net of fee) against SPMO over 2016–2026: correlation 0.97 and a mean ga
 +0.03%/yr. The tracking error of 4.9% comes almost entirely from SPMO's thin
 trading in 2016–17 and the March 2020 dislocation; since 2023 it is about 1%/yr.
 
-## Reference only: two long-history momentum portfolios
-
-Until the 1994–2016 index data arrives, `scripts/reference_series.py` asks the same
-questions of two other **published** momentum portfolios with decades of record.
-Neither is SPMO or its index, both are charged SPMO's 0.13% fee, and nothing from
-them feeds any other script (pinned by `tests/test_reference.py`). Raw downloads
-stay local in `data/reference/` (git-ignored; AQR's terms forbid redistribution).
-
-| | French BIG HiPRIOR | AQR US Large Cap Momentum |
-|---|---|---|
-| what it is | big stocks, top 30% by 12-2m return, value weighted | top third of largest 1,000 by 12-2m return, cap weighted |
-| data | daily, 1926– | monthly, 1980– |
-| monthly corr. with the S&P index, 2016–2026 | 0.92 | 0.93 |
-| CAGR 2016–2026 vs S&P index 20.0% | 15.3% | 15.7% |
-| max drawdown, from 1994 | −50% | −51% |
-| full / half Kelly, from 1994 | 2.10x / 1.05x | 2.19x / 1.10x (monthly) |
-| full / half Kelly, whole history | 2.16x / 1.08x (1926–) | 2.48x / 1.24x (1980–) |
-| 10y 5th-pct-optimal leverage | 1.00x (1926– and 1994–) | — (monthly data) |
-| P(drawdown < −70%) over 40y at 1.5x / 2.0x | 41% / 89% (1926–); 22% / 73% (1994–) | — |
-
-Same table for the real index, 2016–2026 only: full Kelly 3.35x, 5th-pct-optimal
-1.31x, P(drawdown < −70%) at 1.5x / 2.0x = 10% / 52%.
-
-What this says, and does not say:
-
-- **The missing decades matter a lot.** With 2000–02 and 2008 in the sample,
-  both portfolios give a downside-robust answer of no margin, and Kelly falls from
-  about 3.4x to about 2.1–2.5x. Leveraged through the GFC at 1.5x (monthly
-  rebalance), the French portfolio fell 67%; at 2x, 79%
-  (`results/reference/episodes.csv`).
-- **But they are not the index.** Over the decade they overlap, the S&P index
-  compounded about 4–4.5pp a year more than either one. Whether that gap also held
-  in 1994–2016, or is specific to this decade, is exactly what the missing index
-  data will show. So these numbers are an indication of direction, not a
-  substitute.
-- AQR is month-end only. It misses drops within a month (its covid drawdown is
-  −19%, against −31% for the daily index), so its drawdowns understate risk.
-
 ## Adding the 1994–2016 history
 
 1. Export daily SP500MUT levels from 1994-09-16 to today. On a Bloomberg terminal
@@ -266,7 +228,6 @@ SPMO_RESULTS_DIR=results/research python scripts/run_analysis.py
 SPMO_RESULTS_DIR=results/research python scripts/overfitting_audit.py
 SPMO_RESULTS_DIR=results/research python scripts/funding_strategies.py
 SPMO_RESULTS_DIR=results/research python scripts/optimise_target.py --horizon 40 --gamma 1
-python scripts/reference_series.py   # reference portfolios, writes results/reference/
 ```
 
 The audited 365/252 conversion for calendar-day financing on a 360-day basis is
